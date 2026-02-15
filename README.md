@@ -74,13 +74,11 @@ This module is in early (alpha) stage. APIs and UI may change.
 
 - [ericfoy](https://github.com/ericfoy)
 
-
-Credits
+## Credits
 
 - This module was created for Backdrop by [ericfoy](https://github.com/ericfoy)
 - Sponsored by [Perideo LLC](https://perideo.com).
 
-
 ## License
 
-GPL v2 or later.
+This project is GPL v2 software. See the LICENSE.txt file in this directory for complete text.
