@@ -1,6 +1,6 @@
 name = Node Form Variants
 description = Adds configurable form variants for node edit forms: show/hide/reorder fields and extra form elements.
-package = Perideo
+package = User Interface
 type = module
 backdrop = 1.x
 version = 1.x-0.302
