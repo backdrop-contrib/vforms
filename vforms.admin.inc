@@ -3,7 +3,7 @@
 /**
  * @file
  * Admin UI for Node Form Variants.
- * commit concurrency: 301
+ * commit concurrency: 302
  */
 
 function vforms_admin_overview($node_type) {
@@ -293,7 +293,11 @@ function vforms_admin_variant_form($form, &$form_state, $node_type, $variant_key
 
   foreach ($components as $ckey => $meta) {
     if (empty($variant['components'][$ckey]) || !is_array($variant['components'][$ckey])) {
-      $variant['components'][$ckey] = array('include' => 1, 'weight' => 0, 'group' => '');
+      $variant['components'][$ckey] = array('include' => 1, 'weight' => 0, 'group' => '', 'fieldset_mode' => 'open');
+    }
+    // Backwards-compat: older configs won't have this key.
+    elseif (!isset($variant['components'][$ckey]['fieldset_mode'])) {
+      $variant['components'][$ckey]['fieldset_mode'] = 'open';
     }
   }
 
@@ -366,6 +370,14 @@ function vforms_admin_variant_form($form, &$form_state, $node_type, $variant_key
         'style' => 'display:none',
       ),
     );
+    $form['components']['table'][$ckey]['fieldset_mode'] = array(
+      '#type' => 'hidden',
+      '#default_value' => isset($cfg['fieldset_mode']) ? (string) $cfg['fieldset_mode'] : 'open',
+      '#attributes' => array('class' => array('vforms-group-fs-mode')),
+      '#wrapper_attributes' => array(
+        'style' => 'display:none',
+      ),
+    );
   }
 
   // Admin components table.
@@ -401,6 +413,14 @@ function vforms_admin_variant_form($form, &$form_state, $node_type, $variant_key
       '#attributes' => array('class' => array('vforms-group-input')),
       '#wrapper_attributes' => array(
         'class' => array('vforms-group-col'),
+        'style' => 'display:none',
+      ),
+    );
+    $form['admin_components']['table'][$ckey]['fieldset_mode'] = array(
+      '#type' => 'hidden',
+      '#default_value' => isset($cfg['fieldset_mode']) ? (string) $cfg['fieldset_mode'] : 'open',
+      '#attributes' => array('class' => array('vforms-group-fs-mode')),
+      '#wrapper_attributes' => array(
         'style' => 'display:none',
       ),
     );
@@ -470,6 +490,7 @@ function vforms_admin_variant_form_submit($form, &$form_state) {
         'include' => !empty($row['include']) ? 1 : 0,
         'weight'  => isset($row['weight']) ? (int) $row['weight'] : 0,
         'group'   => isset($row['group']) ? (string) $row['group'] : '',
+        'fieldset_mode' => isset($row['fieldset_mode']) ? (string) $row['fieldset_mode'] : '',
       );
     }
   }

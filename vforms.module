@@ -2,7 +2,7 @@
 /**
  * @file
  * Node Form Variants: form variants for node edit forms (Phase 1).
- * commit concurrency: 301
+ * commit concurrency: 302
  */
 
 /**
@@ -23,7 +23,7 @@ function vforms_library_info() {
   // Ensures the dialog target element exists (used by modal edit links).
   $libraries['dialog_target'] = array(
     'title' => 'Node Form Variants: Dialog target helpers',
-    'version' => '0.301',
+    'version' => '0.302',
     'js' => array(
       $path . '/js/vforms.dialog_target.js' => array(),
     ),
@@ -32,7 +32,7 @@ function vforms_library_info() {
   // AJAX command(s) and dialog tweaks used by the modal variant editor.
   $libraries['dialog'] = array(
     'title' => 'Node Form Variants: Dialog helpers',
-    'version' => '0.301',
+    'version' => '0.302',
     'js' => array(
       $path . '/js/vforms.ajax.js' => array(),
       $path . '/js/vforms.dialog.js' => array(),
@@ -42,7 +42,7 @@ function vforms_library_info() {
   // Admin UI helpers for the "Configure form variant" page.
   $libraries['admin_variant'] = array(
     'title' => 'Node Form Variants: Admin variant UI',
-    'version' => '0.301',
+    'version' => '0.302',
     'js' => array(
       $path . '/js/vforms.admin_variant.js' => array(),
     ),
@@ -527,15 +527,33 @@ function vforms_apply_variant($entity_type, $bundle, $variant_key, array &$form,
         if ($group !== '') {
           $container_key = 'vforms_group__' . md5($group);
 
+          // Fieldset behavior for this group.
+          // - open: collapsible, initially open
+          // - closed: collapsible, initially closed
+          // - locked_open: not collapsible
+          $fieldset_mode = !empty($cfg['fieldset_mode']) ? (string) $cfg['fieldset_mode'] : 'open';
+          $collapsible = TRUE;
+          $collapsed = FALSE;
+          if ($fieldset_mode === 'closed') {
+            $collapsed = TRUE;
+          }
+          elseif ($fieldset_mode === 'locked_open') {
+            $collapsible = FALSE;
+            $collapsed = FALSE;
+          }
+
           if (!isset($form[$container_key])) {
             $form[$container_key] = array(
               '#type' => 'fieldset',
               '#title' => check_plain($group),
               '#weight' => isset($form[$name]['#weight']) ? $form[$name]['#weight'] : 0,
-              '#collapsible' => TRUE,
-              '#collapsed' => FALSE,
             );
           }
+
+          // Re-assert in case later component rows carried a different value.
+          $form[$container_key]['#collapsible'] = $collapsible;
+          $form[$container_key]['#collapsed'] = $collapsed;
+
 
           // Move element under the container.
           $form[$container_key][$name] = $form[$name];
@@ -837,6 +855,7 @@ function vforms_variant_build_default($entity_type, $bundle) {
       'include' => 1,
       'weight' => $w,
       'group' => '',
+      'fieldset_mode' => 'open',
     );
     $w += 1;
   }
@@ -880,7 +899,11 @@ function theme_vforms_components_table($variables) {
     $row_cells[] = check_plain($ckey);      // Machine name (e.g. field:field_email)
     $row_cells[] = backdrop_render($table[$ckey]['kind']);
     $row_cells[] = backdrop_render($table[$ckey]['weight']);
-    $row_cells[] = backdrop_render($table[$ckey]['group']);
+    $cell = backdrop_render($table[$ckey]['group']);
+    if (isset($table[$ckey]['fieldset_mode'])) {
+      $cell .= backdrop_render($table[$ckey]['fieldset_mode']);
+    }
+    $row_cells[] = $cell;
 
     $row = array(
       'data' => $row_cells,

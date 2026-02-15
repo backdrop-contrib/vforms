@@ -1,5 +1,5 @@
 /**
- * commit concurrency: 300.
+ * commit concurrency: 302.
  */
 
 (function ($) {
@@ -108,6 +108,8 @@
   // per-component (include, weight, group).
   // ----------------------------------------------------------------------
 
+  var mfGroupUid = 0;
+
   function mfGetColspan($table) {
     var th = $table.find('thead th').length;
     if (th) return th;
@@ -118,8 +120,11 @@
   function mfMakeGroupRow(title, colspan, opts) {
     opts = opts || {};
     var isUngrouped = !!opts.ungrouped;
+    var uid = ++mfGroupUid;
+    var mode = opts.mode || 'open';
 
     var $tr = $('<tr class="vforms-group-row" />');
+    $tr.attr('data-vforms-group-uid', uid);
     if (isUngrouped) {
       $tr.addClass('vforms-group-row-ungrouped');
     }
@@ -128,6 +133,7 @@
     var $bar = $('<div class="vforms-group-bar" />');
     var $label;
     var $title;
+    var $collapse = $();
     if (isUngrouped) {
       $label = $('<span class="vforms-group-label" />').text(mfT('Ungrouped'));
       // No editable title for ungrouped regions.
@@ -136,6 +142,25 @@
     else {
       $label = $('<span class="vforms-group-label" />').text(mfT('Group:'));
       $title = $('<input type="text" class="vforms-group-title form-text" />').val(title);
+      var radioName = 'vforms_group_collapse_' + uid;
+      $collapse = $('<span class="vforms-group-collapse" />');
+
+      function addOpt(val, label) {
+        var $lbl = $('<label class="vforms-group-collapse-opt" />');
+        var $r = $('<input type="radio" class="vforms-group-collapse-radio" />').attr({
+          name: radioName,
+          value: val
+        });
+        if (mode === val) {
+          $r.prop('checked', true);
+        }
+        $lbl.append($r).append($('<span />').text(mfT(label)));
+        $collapse.append($lbl);
+      }
+
+      addOpt('closed', 'closed');
+      addOpt('open', 'open');
+      addOpt('locked_open', 'locked open');
     }
 
     var $up = $('<a href="#" class="vforms-group-move vforms-group-move-up" />').attr({
@@ -154,6 +179,9 @@
     $bar.append($label);
     if ($title && $title.length) {
       $bar.append($title);
+    }
+    if ($collapse && $collapse.length) {
+      $bar.append($collapse);
     }
     $bar.append($up, $down, $remove);
     $td.append($bar);
@@ -193,6 +221,24 @@
     $g.val(value);
   }
 
+  function mfGetRowFieldsetMode($row) {
+    var $m = $row.find('input.vforms-group-fs-mode');
+    if (!$m.length) return '';
+    return $.trim($m.val() || '');
+  }
+
+  function mfSetRowFieldsetMode($row, value) {
+    var $m = $row.find('input.vforms-group-fs-mode');
+    if (!$m.length) return;
+    $m.val(value);
+  }
+
+  function mfGetGroupRowFieldsetMode($groupRow) {
+    var $checked = $groupRow.find('input.vforms-group-collapse-radio:checked');
+    return $checked.length ? String($checked.val()) : 'open';
+  }
+
+
   function mfRenumberWeights($table) {
     var i = 0;
     mfComponentRows($table).each(function () {
@@ -214,6 +260,7 @@
 
   function mfUpdateGroupAssignments($table) {
     var current = '';
+    var currentMode = 'open';
     var $tbody = $table.find('tbody');
     if (!$tbody.length) return;
 
@@ -222,24 +269,29 @@
       if (mfIsGroupRow($tr)) {
         if (mfIsUngroupedRow($tr)) {
           current = '';
+          currentMode = 'open';
         }
         else {
           var v = $.trim($tr.find('input.vforms-group-title').val() || '');
           current = v;
+          currentMode = mfGetGroupRowFieldsetMode($tr);
         }
         return;
       }
 
       if (current) {
         $tr.addClass('vforms-in-group');
+        mfSetRowFieldsetMode($tr, currentMode);
       }
       else {
         $tr.removeClass('vforms-in-group');
+        mfSetRowFieldsetMode($tr, '');
       }
 
       mfSetRowGroupValue($tr, current);
     });
   }
+
 
   function mfEnsureUngroupedHeaders($table) {
     var $tbody = $table.find('tbody');
@@ -345,7 +397,8 @@
       if (!$members.length) return;
 
       var $first = $members.first();
-      var $hdr = mfMakeGroupRow(g, colspan);
+      var mode = mfGetRowFieldsetMode($first) || 'open';
+      var $hdr = mfMakeGroupRow(g, colspan, { mode: mode });
       $hdr.insertBefore($first);
 
       var $after = $hdr;
@@ -407,6 +460,12 @@
             mfUpdateGroupAssignments($table);
           });
 
+        // Group collapse mode changes.
+        mfOnce($table, 'vforms-groups-collapse-listener')
+          .on('change', 'input.vforms-group-collapse-radio', function () {
+            mfUpdateGroupAssignments($table);
+          });
+
         // Move group up/down.
         mfOnce($table, 'vforms-groups-move-listener')
           .on('click', 'a.vforms-group-move-up, a.vforms-group-move-down', function (e) {
@@ -434,7 +493,9 @@
             // Clear group assignment for contiguous member rows.
             var $members = $groupRow.nextUntil('tr.vforms-group-row');
             $members.each(function () {
-              mfSetRowGroupValue($(this), '');
+              var $m = $(this);
+              mfSetRowGroupValue($m, '');
+              mfSetRowFieldsetMode($m, '');
             });
 
             if (wasUngrouped) {
