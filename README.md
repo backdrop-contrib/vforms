@@ -24,10 +24,9 @@ Node Form Variants lets you create and manage multiple **edit-form layouts** (�
 
 ## Installation
 
-1. Place the module in:
-   - `modules/custom/vforms` (recommended), or
-   - `modules/contrib/vforms`
-2. Enable the module at:  
+- Install this module using the official Backdrop CMS instructions at
+  https://docs.backdropcms.org/documentation/extend-with-modules.
+- Enable the module at:  
    **Administration → Functionality → List modules**
 
 ## Permissions
@@ -42,7 +41,7 @@ Look for permissions under the `vforms` module section.
 For each content type:
 
 - Go to: **Administration → Structure → Content types**
-- Click **Manage form variants** (or similar link provided by the module) for the type.
+- Click **Form variants** for the type.
 
 Variant edit path pattern:
 
