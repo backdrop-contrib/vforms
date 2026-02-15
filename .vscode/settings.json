@@ -1,0 +1,17 @@
+{
+    "intelephense.environment.includePaths": [
+        "../../backdrop/core",
+        "../../backdrop/core/includes",
+        "./stubs",
+        "../nextnum"
+    ],
+    
+    "intelephense.files.exclude": [
+      "**/.git/**",
+      "**/SCRATCH/**",
+      "**/ARCHIVE/**",
+    ]
+}
+
+
+

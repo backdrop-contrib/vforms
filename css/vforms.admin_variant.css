@@ -1,0 +1,76 @@
+/* Node Form Variants: admin variant enhancements (UI only). 
+ *
+ * commit concurrency: 301
+*/
+
+/* Group header row (inserted client-side). */
+tr.vforms-group-row > td.vforms-group-cell {
+  padding: 10px 8px;
+  border-top: 4px groove #cc3;
+  background: #de9;
+
+}
+/* "Ungrouped" region headers are UI boundaries (saved group value is empty). */
+tr.vforms-group-row-ungrouped > td.vforms-group-cell {
+  background: #d0e7e7;
+  border-top: 4px groove #7ce;
+}
+
+.vforms-group-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vforms-group-label {
+  font-weight: 600;
+}
+
+.vforms-group-title {
+  min-width: 240px;
+}
+
+.vforms-group-move,
+.vforms-group-remove {
+  display: inline-block;
+  padding: 0 6px;
+  text-decoration: none;
+  line-height: 20px;
+}
+
+.vforms-group-remove {
+  margin-left: auto;
+}
+
+/* Light visual indentation for members of a group. */
+tr.vforms-in-group td:first-child {
+  padding-left: 24px;
+}
+
+.invert-button {
+    display: flex;
+  border: 1px solid;
+  margin: .5em 1em .5em 1em;
+  padding: 0 .3em;
+  border-radius: var(--butn-radius);
+  align-items: center;
+}
+
+.vforms-bulk-controls {
+    display: flex;
+}
+
+.vforms-add-group-control {
+    margin: 10px;
+}
+.vforms-add-group-control * {
+    margin: 5px;
+}
+/* Hide the legacy "Group" column (UI only). The hidden inputs are still
+ * present and are updated by the drag/drop grouping behavior.
+ */
+#vforms-components-table th:nth-child(6),
+#vforms-components-table td:nth-child(6) {
+  display: none;
+}
+

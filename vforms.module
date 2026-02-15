@@ -1,0 +1,1152 @@
+<?php
+/**
+ * @file
+ * Node Form Variants: form variants for node edit forms (Phase 1).
+ * commit concurrency: 301
+ */
+
+/**
+ * Implements hook_views_api().
+ */
+function vforms_views_api() {
+  return array('api' => 3);
+}
+
+/**
+ * Implements hook_library_info().
+ */
+function vforms_library_info() {
+  $path = backdrop_get_path('module', 'vforms');
+
+  $libraries = array();
+
+  // Ensures the dialog target element exists (used by modal edit links).
+  $libraries['dialog_target'] = array(
+    'title' => 'Node Form Variants: Dialog target helpers',
+    'version' => '0.301',
+    'js' => array(
+      $path . '/js/vforms.dialog_target.js' => array(),
+    ),
+  );
+
+  // AJAX command(s) and dialog tweaks used by the modal variant editor.
+  $libraries['dialog'] = array(
+    'title' => 'Node Form Variants: Dialog helpers',
+    'version' => '0.301',
+    'js' => array(
+      $path . '/js/vforms.ajax.js' => array(),
+      $path . '/js/vforms.dialog.js' => array(),
+    ),
+  );
+
+  // Admin UI helpers for the "Configure form variant" page.
+  $libraries['admin_variant'] = array(
+    'title' => 'Node Form Variants: Admin variant UI',
+    'version' => '0.301',
+    'js' => array(
+      $path . '/js/vforms.admin_variant.js' => array(),
+    ),
+    'css' => array(
+      $path . '/css/vforms.admin_variant.css' => array(),
+    ),
+  );
+
+  return $libraries;
+}
+
+/**
+ * Implements hook_autoload_info().
+ */
+function vforms_autoload_info() {
+  return array(
+    'vforms_views_handler_field_node_link_vforms_edit' => 'views/vforms.views_handler_field_node_link_vforms_edit.inc',
+  );
+}
+
+
+/**
+ * Implements hook_permission().
+ */
+function vforms_permission() {
+  return array(
+    'administer vforms' => array(
+      'title' => t('Administer Node Form Variants'),
+    ),
+    // Optional: gate use of non-default variants.
+    'use vforms variants' => array(
+      'title' => t('Use non-default form variants'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_theme().
+ */
+function vforms_theme() {
+  return array(
+    // Theme the admin "Form components" container as a draggable table.
+    'vforms_components_table' => array(
+      'render element' => 'table',
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function vforms_menu() {
+  $items = array();
+
+  // Local task under content type manage pages.
+  // Example: /admin/structure/types/manage/page/vforms
+  $items['admin/structure/types/manage/%node_type/vforms'] = array(
+    'title' => 'Form variants',
+    'page callback' => 'vforms_admin_overview',
+    'page arguments' => array(4),
+    'access arguments' => array('administer vforms'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'vforms.admin.inc',
+    'weight' => 1,
+  );
+
+  $items['admin/structure/types/manage/%node_type/vforms/add'] = array(
+    'title' => 'Add form variant',
+    'page callback' => 'backdrop_get_form',
+    'page arguments' => array('vforms_admin_variant_form', 4, NULL),
+    'access arguments' => array('administer vforms'),
+    'type' => MENU_LOCAL_ACTION,
+    'file' => 'vforms.admin.inc',
+  );
+
+  $items['admin/structure/types/manage/%node_type/vforms/%vforms_variant/edit'] = array(
+    'title' => 'Configure form variant',
+    'page callback' => 'backdrop_get_form',
+    'page arguments' => array('vforms_admin_variant_form', 4, 6),
+    'access arguments' => array('administer vforms'),
+    'type' => MENU_CALLBACK,
+    'file' => 'vforms.admin.inc',
+  );
+
+  $items['admin/structure/types/manage/%node_type/vforms/%vforms_variant/delete'] = array(
+    'title' => 'Delete',
+    'page callback' => 'backdrop_get_form',
+    'page arguments' => array('vforms_admin_variant_delete_form', 4, 6),
+    'access arguments' => array('administer vforms'),
+    'type' => MENU_CALLBACK,
+    'file' => 'vforms.admin.inc',
+  );
+
+  $items['node/%node/form'] = array(
+    'title' => 'Form',
+    'page callback' => 'vforms_node_form_default_redirect',
+    'page arguments' => array(1),
+    'access callback' => 'node_access',
+    'access arguments' => array('update', 1),
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['node/%node/form/%vforms_variant'] = array(
+    'title callback' => 'vforms_node_variant_title',
+    'title arguments' => array(1, 3),
+    'page callback' => 'vforms_node_variant_page',
+    'page arguments' => array(1, 3),
+    'access callback' => 'vforms_node_variant_access',
+    'access arguments' => array(1, 3),
+    'type' => MENU_CALLBACK,
+  );
+
+  // Modal/dialog route for a variant edit form.
+  // Example: /node/1410/form/quick/dialog
+  $items['node/%node/form/%vforms_variant/dialog'] = array(
+    'title callback' => 'vforms_node_variant_title',
+    'title arguments' => array(1, 3),
+    'page callback' => 'vforms_node_variant_dialog_page',
+    'page arguments' => array(1, 3),
+    'access callback' => 'vforms_node_variant_access',
+    'access arguments' => array(1, 3),
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Menu loader: validate variant key.
+ */
+function vforms_variant_load($key) {
+  // Only allow machine-ish keys.
+  if (!is_string($key) || !preg_match('/^[a-z0-9_]+$/', $key)) {
+    return NULL;
+  }
+  return $key;
+}
+
+/**
+ * Title callback for variant edit pages.
+ */
+function vforms_node_variant_title($node, $variant_key) {
+  $variant = vforms_variant_get('node', $node->type, $variant_key);
+  $label = !empty($variant['label']) ? $variant['label'] : $variant_key;
+  return t('Edit @title (@variant)', array('@title' => $node->title, '@variant' => $label));
+}
+
+/**
+ * Access callback for node variant route.
+ */
+function vforms_node_variant_access($node, $variant_key) {
+  if (!$node || empty($node->type)) {
+    return FALSE;
+  }
+  if (!node_access('update', $node)) {
+    return FALSE;
+  }
+
+  // Variant must exist.
+  $variant = vforms_variant_get('node', $node->type, $variant_key);
+  if (!$variant) {
+    return FALSE;
+  }
+
+  // Default is always allowed; non-default requires permission.
+  if ($variant_key !== 'default' && !user_access('use vforms variants')) {
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+/**
+ * Page callback for node variant route.
+ */
+function vforms_node_variant_page($node, $variant_key) {
+  // Make variant visible to our form alter.
+  $_GET['vforms_variant'] = $variant_key;
+
+  // Ensure Backdrop's node page callbacks are loaded.
+  include_once backdrop_get_path('module', 'node') . '/node.pages.inc';
+
+  // Use core edit-page callback (sets title + builds correct form ID).
+  return node_page_edit($node);
+}
+
+/**
+ * Page callback for modal/dialog route.
+ */
+function vforms_node_variant_dialog_page($node, $variant_key) {
+  // Make variant + dialog intent visible to our form alter.
+  $_GET['vforms_variant'] = $variant_key;
+  $_GET['vforms_dialog'] = 1;
+
+  // Ensure core AJAX/dialog libraries are present.
+  backdrop_add_library('system', 'backdrop.ajax');
+  // Many themes also need the dialog library; harmless if already present.
+  // (Backdrop core exposes dialog behavior through system libraries.)
+  @backdrop_add_library('system', 'ui.dialog');
+
+  include_once backdrop_get_path('module', 'node') . '/node.pages.inc';
+  return node_page_edit($node);
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter() for all node edit forms.
+ *
+ * This is where Phase 1 applies: show/hide + weights (+ optional grouping).
+ */
+function vforms_form_node_form_alter(&$form, &$form_state) {
+  // Ensure node form handlers are always available during /system/ajax rebuilds.
+  $node_pages_inc = backdrop_get_path('module', 'node') . '/node.pages.inc';
+  if (empty($form_state['build_info']['files']) || !is_array($form_state['build_info']['files'])) {
+    $form_state['build_info']['files'] = array();
+  }
+  if (!in_array($node_pages_inc, $form_state['build_info']['files'])) {
+    $form_state['build_info']['files'][] = $node_pages_inc;
+  }
+  include_once $node_pages_inc;
+
+  // Input can carry flags during /system/ajax.
+  $input = (!empty($form_state['input']) && is_array($form_state['input']))
+    ? $form_state['input']
+    : array();
+
+  // Determine variant key from GET, posted values, or persisted state.
+  $variant_key = '';
+  if (!empty($_GET['vforms_variant'])) {
+    $variant_key = (string) $_GET['vforms_variant'];
+  }
+  elseif (!empty($input['vforms_variant'])) {
+    $variant_key = (string) $input['vforms_variant'];
+  }
+  elseif (!empty($form_state['vforms_variant'])) {
+    $variant_key = (string) $form_state['vforms_variant'];
+  }
+
+  if ($variant_key === '' || empty($form['#node']) || empty($form['#node']->type)) {
+    return;
+  }
+
+  $bundle = $form['#node']->type;
+
+  // Persist so after_build and AJAX rebuilds can re-use it.
+  $form_state['vforms_variant'] = $variant_key;
+  $form_state['vforms_bundle']  = $bundle;
+
+  // Apply include/weights/grouping.
+  vforms_apply_variant('node', $bundle, $variant_key, $form, $form_state);
+
+  // Re-assert weights at the end of the build so later alters can't override.
+  if (empty($form['#after_build']) || !is_array($form['#after_build'])) {
+    $form['#after_build'] = array();
+  }
+  if (!in_array('vforms_after_build_reassert_weights', $form['#after_build'])) {
+    $form['#after_build'][] = 'vforms_after_build_reassert_weights';
+  }
+
+  // Dialog intent: GET or posted value or persisted state.
+  $is_dialog = !empty($_GET['vforms_dialog']) || !empty($input['vforms_dialog']) || !empty($form_state['vforms_dialog']);
+  if ($is_dialog) {
+    $form_state['vforms_dialog'] = 1;
+    vforms_make_node_form_dialog($form, $form_state, $variant_key);
+  }
+}
+
+/**
+ * Convert a node edit form into a modal-friendly AJAX form.
+ */
+function vforms_make_node_form_dialog(array &$form, array &$form_state, $variant_key) {
+
+  // Ensure the node form's validate/submit functions are available during
+  // AJAX rebuilds triggered by this dialog.
+  $node_pages_inc = backdrop_get_path('module', 'node') . '/node.pages.inc';
+  if (empty($form_state['build_info']['files']) || !in_array($node_pages_inc, $form_state['build_info']['files'])) {
+    $form_state['build_info']['files'][] = $node_pages_inc;
+  }
+  include_once $node_pages_inc;
+
+  // Remove actions that don't make sense in a quick-edit dialog.
+  unset($form['actions']['preview']);
+  unset($form['actions']['delete']);
+
+  // Persist flags through /system/ajax POST rebuilds.
+  $form['vforms_dialog'] = array(
+    '#type' => 'value',
+    '#value' => 1,
+  );
+  $form['vforms_variant'] = array(
+    '#type' => 'value',
+    '#value' => (string) $variant_key,
+  );
+
+  // Wrapper for AJAX replace-on-error.
+  $form['#prefix'] = '<div id="vforms-dialog-wrapper">';
+  $form['#suffix'] = '</div>';
+  $form['#attributes']['class'][] = 'vforms-dialog-form';
+
+  // Make sure the form POST stays on the dialog route (and is root-relative).
+  $form['#action'] = url(current_path(), array('absolute' => FALSE));
+  // Ensure Node Form Variants dialog commands (vformsReload) are always available.
+  $form['#attached']['library'][] = array('vforms', 'dialog');
+  $form['#attached']['library'][] = array('vforms', 'dialog_target');
+
+  // Attach core AJAX/dialog behavior.
+  backdrop_add_library('system', 'backdrop.ajax');
+  @backdrop_add_library('system', 'ui.dialog');
+
+  // AJAX save: keep it a REAL submit element and bind AJAX to click.
+  if (isset($form['actions']['submit'])) {
+    $form['actions']['submit']['#type'] = 'submit';
+    $form['actions']['submit']['#ajax'] = array(
+      'callback' => 'vforms_dialog_ajax_submit',
+      'event'    => 'click',
+      'wrapper'  => 'vforms-dialog-wrapper',
+    );
+  }
+
+  // Cancel closes dialog (no validation).
+  $form['actions']['cancel'] = array(
+    '#type' => 'submit',
+    '#value' => t('Cancel'),
+    '#limit_validation_errors' => array(),
+    '#submit' => array('vforms_dialog_cancel_submit'),
+    '#ajax' => array(
+      'callback' => 'vforms_dialog_ajax_cancel',
+      'event'    => 'click',
+    ),
+    '#weight' => 100,
+  );
+}
+/**
+ * No-op submit handler for Cancel.
+ */
+function vforms_dialog_cancel_submit($form, &$form_state) {
+  // Intentionally empty.
+}
+
+/**
+ * AJAX callback for Cancel.
+ */
+function vforms_dialog_ajax_cancel($form, &$form_state) {
+  return array(
+    '#type' => 'ajax',
+    '#commands' => array(
+      ajax_command_close_dialog('#vforms-dialog-target'),
+    ),
+  );
+}
+
+/**
+ * AJAX callback for Save.
+ */
+function vforms_dialog_ajax_submit($form, &$form_state) {
+  if (!empty($form_state['rebuild'])) {
+    return $form; // keep dialog open and show validation errors
+  }
+
+  // Add a normal Backdrop message (server-side).
+  backdrop_set_message(t('Saved.'), 'status');
+
+  $response = array(
+    '#type' => 'ajax',
+    '#commands' => array(),
+  );
+
+  // Close the dialog (for your target-based dialog).
+  $response['#commands'][] = ajax_command_close_dialog('#vforms-dialog-target');
+
+  // Re-render messages on the underlying page (if it has a #messages wrapper).
+  // If your theme uses a different selector, change '#messages' accordingly.
+  $response['#commands'][] = ajax_command_replace('#messages', theme('status_messages'));
+
+  // If you want a hard refresh instead of messages:
+  // $response['#commands'][] = array('command' => 'vformsReload');
+
+  return $response;
+}
+
+/**
+ * Helper to generate a modal link to a variant editor.
+ */
+function vforms_modal_link(Node $node, $variant_key, $text = NULL, array $dialog_options = array()) {
+  // Ensure required client-side behaviors are present on whatever page this link
+  // is rendered.
+  backdrop_add_library('system', 'backdrop.ajax');
+  @backdrop_add_library('system', 'ui.dialog');
+
+  if ($text === NULL) {
+    $text = t('Edit');
+  }
+
+  $dialog_options += array('width' => 900);
+
+  return l($text, "node/{$node->nid}/form/$variant_key/dialog", array(
+    'query' => array(
+      // Match core edit-link behavior: return to the page the user clicked from.
+      'destination' => current_path(),
+    ),
+    'attributes' => array(
+      'class' => array('use-ajax'),
+      'data-dialog' => 'true',
+      'data-dialog-options' => json_encode($dialog_options),
+    ),
+  ));
+}
+
+/**
+ * Apply a form variant to a built edit form.
+ *
+ * Phase 1:
+ * - show/hide fields and extra elements
+ * - reorder by weight
+ * - optional grouping into fieldsets by "group" label
+ */
+function vforms_apply_variant($entity_type, $bundle, $variant_key, array &$form, array &$form_state) {
+  $variant = vforms_variant_get($entity_type, $bundle, $variant_key);
+  if (!$variant) {
+    return;
+  }
+
+  // Variant setting: optionally exclude administrative "extra" sections.
+  // This primarily targets the node form's "Publishing options", "Authoring information",
+  // "URL path settings", etc.
+  $admin_extras_mode = vforms_variant_admin_extras_mode($variant);
+
+  // Apply to fields/widgets.
+  if (!empty($variant['components']) && is_array($variant['components'])) {
+    foreach ($variant['components'] as $key => $cfg) {
+      // $key is like: "field:field_foo" or "extra:title"
+      if (!is_array($cfg)) {
+        continue;
+      }
+      $include = !empty($cfg['include']);
+
+      $parts = explode(':', $key, 2);
+      if (count($parts) !== 2) {
+        continue;
+      }
+      list($kind, $name) = $parts;
+
+      // If this variant is set to exclude administrative extras, force-hide all
+      // "extra" components except Title.
+      if ($admin_extras_mode === 'exclude' && $kind === 'extra' && $name !== 'title') {
+        $include = FALSE;
+      }
+
+      // If element not present on this form, skip quietly.
+      if (!isset($form[$name])) {
+        continue;
+      }
+
+      if (!$include) {
+        if ($kind === 'extra' && $name === 'title' && isset($form['title']['title'])) {
+          $form['title']['#access'] = FALSE;
+          $form['title']['title']['#access'] = FALSE;
+        }
+        else {
+          $form[$name]['#access'] = FALSE;
+        }
+        continue;
+      }
+
+      if (isset($cfg['weight']) && is_numeric($cfg['weight'])) {
+        $w = (int) $cfg['weight'];
+
+        // Special-case: core "Title" extra field is a wrapper; actual widget is title[title].
+        if ($kind === 'extra' && $name === 'title' && isset($form['title']['title'])) {
+          $form['title']['title']['#weight'] = $w;
+          // Keep wrapper near it too (harmless, but helps some themes/layouts).
+          $form['title']['#weight'] = $w;
+        }
+        else {
+          $form[$name]['#weight'] = $w;
+        }
+      }
+
+      // Optional grouping (very lightweight): move into a fieldset by group label.
+      // Only if group label is set and element is accessible.
+      if (!empty($cfg['group']) && is_string($cfg['group'])) {
+        $group = trim($cfg['group']);
+        if ($group !== '') {
+          $container_key = 'vforms_group__' . md5($group);
+
+          if (!isset($form[$container_key])) {
+            $form[$container_key] = array(
+              '#type' => 'fieldset',
+              '#title' => check_plain($group),
+              '#weight' => isset($form[$name]['#weight']) ? $form[$name]['#weight'] : 0,
+              '#collapsible' => TRUE,
+              '#collapsed' => FALSE,
+            );
+          }
+
+          // Move element under the container.
+          $form[$container_key][$name] = $form[$name];
+          unset($form[$name]);
+        }
+      }
+    }
+  }
+
+  // Hide the vertical tabs wrapper if all admin sections under it were hidden.
+  // (Otherwise some themes render an empty "Additional settings" container.)
+  if ($admin_extras_mode === 'exclude') {
+    // Force-hide any remaining admin sections grouped under additional_settings,
+    // even if they were not registered via field_info_extra_fields().
+    vforms_force_hide_admin_sections($form);
+  }
+
+  // IMPORTANT: Do not hide $form['additional_settings'] here.
+  // Some modules (notably Path and Menu) add their admin fieldsets in their
+  // own hook_form_alter() implementations that may run *after* Node Form Variants.
+  // If we hide 'additional_settings' too early, late-added fieldsets will be
+  // grouped under a hidden parent and appear to "leak" or "disappear".
+  //
+  // We instead evaluate emptiness in vforms_after_build_reassert_weights(),
+  // which runs after all form alters have completed.
+
+  // Note: This is intentionally conservative. It does not attempt to
+  // rebuild widgets or adjust widget types/settings (Phase 2).
+}
+
+/**
+ * Return the admin extras mode for a variant.
+ *
+ * Values:
+ * - 'exclude': hide administrative extra sections (everything "extra:*" except title)
+ * - 'allow'  : treat extras like any other component (legacy behavior)
+ */
+function vforms_variant_admin_extras_mode(array $variant) {
+  if (!empty($variant['settings']) && is_array($variant['settings']) && !empty($variant['settings']['admin_extras'])) {
+    $v = (string) $variant['settings']['admin_extras'];
+    if ($v === 'exclude' || $v === 'allow') {
+      return $v;
+    }
+  }
+  return 'allow';
+}
+
+/**
+ * Force-hide all admin sections grouped under the "Additional settings" tabs.
+ *
+ * This is a runtime safety net for cases where a module adds a fieldset under
+ * additional_settings but does not register it via field_info_extra_fields().
+ */
+function vforms_force_hide_admin_sections(array &$form) {
+  // Some contrib modules (notably URL Redirects / Redirect) do not always place
+  // their fieldsets into the vertical-tabs group unless multiple admin
+  // sections exist. In that case the admin section can render as a plain
+  // fieldset and must be hidden by key, not by '#group'.
+  $known_keys = array(
+    'options',
+    'author',
+    'revision_information',
+    'path',
+    'comment_settings',
+    'menu',
+    'book',
+    'attachments',
+    // Redirect-ish admin sections.
+    'redirect',
+    'urlredirects',
+    'url_redirects',
+    'url_redirect',
+  );
+  foreach ($known_keys as $k) {
+    if (isset($form[$k]) && is_array($form[$k])) {
+      $form[$k]['#access'] = FALSE;
+    }
+  }
+
+  foreach (element_children($form) as $k) {
+    if ($k === 'additional_settings') {
+      continue;
+    }
+    if (empty($form[$k]) || !is_array($form[$k])) {
+      continue;
+    }
+    if (!empty($form[$k]['#group']) && $form[$k]['#group'] === 'additional_settings') {
+      $form[$k]['#access'] = FALSE;
+      continue;
+    }
+
+    // Catch redirect-ish sections that are not grouped into vertical tabs.
+    if (preg_match('/^(redirect|url[_-]?redirects?)$/i', $k)) {
+      $form[$k]['#access'] = FALSE;
+    }
+  }
+}
+
+/**
+ * Hide $form['additional_settings'] if it has no visible children.
+ */
+function vforms_hide_empty_additional_settings(array &$form) {
+  if (empty($form['additional_settings']) || !is_array($form['additional_settings'])) {
+    return;
+  }
+
+  // Note: Grouped fieldsets (e.g. $form['options'], $form['author']) are
+  // siblings of additional_settings and point to it via '#group'. The
+  // vertical_tabs element itself typically has no children.
+  $has_visible = FALSE;
+  foreach (element_children($form) as $k) {
+    if ($k === 'additional_settings') {
+      continue;
+    }
+    if (empty($form[$k]) || !is_array($form[$k])) {
+      continue;
+    }
+    if (!empty($form[$k]['#group']) && $form[$k]['#group'] === 'additional_settings') {
+      if (!isset($form[$k]['#access']) || $form[$k]['#access'] !== FALSE) {
+        $has_visible = TRUE;
+        break;
+      }
+    }
+  }
+
+  if (!$has_visible) {
+    $form['additional_settings']['#access'] = FALSE;
+    // Mark so we can safely re-enable later if subsequent processing adds
+    // visible grouped sections.
+    $form['additional_settings']['#vforms_hidden'] = TRUE;
+  }
+  else {
+    // If we hid this wrapper earlier in the build (or a prior pass), and it
+    // now has visible grouped children, re-enable it.
+    if (!empty($form['additional_settings']['#vforms_hidden'])
+      && isset($form['additional_settings']['#access'])
+      && $form['additional_settings']['#access'] === FALSE) {
+      unset($form['additional_settings']['#access']);
+      unset($form['additional_settings']['#vforms_hidden']);
+    }
+  }
+}
+
+/**
+ * Wrap the Title element in a dedicated container.
+ *
+ * Why: some themes/templates render $form['title'] explicitly in a fixed
+ * position (not governed by #weight). By moving Title under a wrapper and
+ * removing it from the root, Title will render in normal child order via
+ * drupal_render_children(), and Node Form Variants weights will apply.
+ *
+ * Safe: this runs after Form API has already established #parents, so the
+ * element's input name/value handling remains unchanged.
+ */
+function vforms_wrap_title_in_container(array &$form, $weight = NULL) {
+  // Only wrap if the Title element currently exists at root.
+  if (empty($form['title']) || !is_array($form['title'])) {
+    return;
+  }
+
+  // If already wrapped, just update the wrapper weight.
+  if (isset($form['vforms_title_wrapper']) && is_array($form['vforms_title_wrapper'])) {
+    if ($weight !== NULL) {
+      $form['vforms_title_wrapper']['#weight'] = (int) $weight;
+    }
+    if (isset($form['vforms_title_wrapper']['title'])) {
+      return;
+    }
+  }
+
+  if (!isset($form['vforms_title_wrapper']) || !is_array($form['vforms_title_wrapper'])) {
+    $form['vforms_title_wrapper'] = array(
+      '#type' => 'container',
+      '#attributes' => array('class' => array('vforms-title-wrapper')),
+    );
+  }
+
+  if ($weight !== NULL) {
+    $form['vforms_title_wrapper']['#weight'] = (int) $weight;
+  }
+
+  // Move the Title element under the wrapper and remove from root.
+  $form['vforms_title_wrapper']['title'] = $form['title'];
+  unset($form['title']);
+}
+
+/**
+ * Config helpers.
+ */
+function vforms_config_name($entity_type, $bundle) {
+  return 'vforms.' . $entity_type . '.' . $bundle;
+}
+
+function vforms_variants_all($entity_type, $bundle) {
+  $conf = config(vforms_config_name($entity_type, $bundle));
+  $variants = $conf->get('variants');
+  return is_array($variants) ? $variants : array();
+}
+
+function vforms_variant_get($entity_type, $bundle, $variant_key) {
+  $variants = vforms_variants_all($entity_type, $bundle);
+  if (!empty($variants[$variant_key]) && is_array($variants[$variant_key])) {
+    return $variants[$variant_key];
+  }
+  return NULL;
+}
+
+function vforms_variant_set($entity_type, $bundle, $variant_key, array $variant) {
+  $conf = config(vforms_config_name($entity_type, $bundle));
+  $variants = vforms_variants_all($entity_type, $bundle);
+  $variants[$variant_key] = $variant;
+  $conf->set('variants', $variants);
+  $conf->save();
+}
+
+function vforms_variant_delete($entity_type, $bundle, $variant_key) {
+  $conf = config(vforms_config_name($entity_type, $bundle));
+  $variants = vforms_variants_all($entity_type, $bundle);
+  unset($variants[$variant_key]);
+  $conf->set('variants', $variants);
+  $conf->save();
+}
+
+/**
+ * Return the list of components we can manage for a node form:
+ * - fields (field instances on bundle)
+ * - "extra fields" (title, authoring info, etc.)
+ */
+function vforms_components_list($entity_type, $bundle) {
+  $out = array();
+
+  // Fields.
+  if ($entity_type === 'node') {
+    $instances = field_info_instances('node', $bundle);
+    foreach ($instances as $field_name => $inst) {
+      $label = !empty($inst['label']) ? $inst['label'] : $field_name;
+      $out["field:$field_name"] = array(
+        'kind' => 'field',
+        'name' => $field_name,
+        'label' => $label,
+      );
+    }
+
+    // Extra fields (form).
+    $extras = field_info_extra_fields('node', $bundle, 'form');
+    if (is_array($extras)) {
+      foreach ($extras as $key => $info) {
+        $label = !empty($info['label']) ? $info['label'] : $key;
+        $out["extra:$key"] = array(
+          'kind' => 'extra',
+          'name' => $key,
+          'label' => $label,
+        );
+      }
+    }
+
+    // Common administrative sections that often appear under the node form's
+    // "Additional settings" vertical tabs.
+    //
+    // In some Backdrop setups, these may not be registered via Field API
+    // extra fields, yet they still exist on the form (and should be manageable).
+    $known_admin = array(
+      'options' => t('Publishing options'),
+      'author' => t('Authoring information'),
+      'revision_information' => t('Revision information'),
+      'path' => t('URL path settings'),
+      'comment_settings' => t('Comment settings'),
+      'menu' => t('Menu settings'),
+      'book' => t('Book outline'),
+      'attachments' => t('Attachments'),
+      // Contrib Redirect module.
+      'redirect' => t('URL redirects'),
+    );
+    foreach ($known_admin as $key => $label) {
+      $ckey = "extra:$key";
+      if (!isset($out[$ckey])) {
+        $out[$ckey] = array(
+          'kind' => 'extra',
+          'name' => $key,
+          'label' => $label,
+        );
+      }
+    }
+  }
+
+  return $out;
+}
+
+/**
+ * Build a "default" variant definition from current bundle components.
+ */
+function vforms_variant_build_default($entity_type, $bundle) {
+  $components = vforms_components_list($entity_type, $bundle);
+
+  $cfg = array();
+  $w = 0;
+  foreach ($components as $key => $meta) {
+    $cfg[$key] = array(
+      'include' => 1,
+      'weight' => $w,
+      'group' => '',
+    );
+    $w += 1;
+  }
+
+  return array(
+    'label' => t('Default'),
+    // Default behavior should match core: show everything.
+    'settings' => array(
+      'admin_extras' => 'allow',
+    ),
+    'components' => $cfg,
+  );
+}
+
+/**
+ * Theme function for the "Form components" draggable table.
+ */
+function theme_vforms_components_table($variables) {
+  $table = $variables['table'];
+
+  // Ensure the element has an id we can target.
+  if (empty($table['#attributes']['id'])) {
+    $table['#attributes']['id'] = 'vforms-components-table';
+  }
+  $table_id = $table['#attributes']['id'];
+
+  // Attach tabledrag behavior (this also loads the needed JS/CSS).
+  backdrop_add_tabledrag($table_id, 'order', 'sibling', 'vforms-weight');
+
+  $header = !empty($table['#header']) ? $table['#header'] : array();
+  $rows = array();
+
+  foreach (element_children($table) as $ckey) {
+    if (!is_array($table[$ckey])) {
+      continue;
+    }
+
+    $row_cells = array();
+    $row_cells[] = backdrop_render($table[$ckey]['include']);
+    $row_cells[] = backdrop_render($table[$ckey]['label']);
+    $row_cells[] = check_plain($ckey);      // Machine name (e.g. field:field_email)
+    $row_cells[] = backdrop_render($table[$ckey]['kind']);
+    $row_cells[] = backdrop_render($table[$ckey]['weight']);
+    $row_cells[] = backdrop_render($table[$ckey]['group']);
+
+    $row = array(
+      'data' => $row_cells,
+      'class' => array('draggable'),
+    );
+
+    // Preserve any row-level attributes (e.g. you already add 'draggable').
+    if (!empty($table[$ckey]['#attributes']['class']) && is_array($table[$ckey]['#attributes']['class'])) {
+      $row['class'] = array_values(array_unique(array_merge($row['class'], $table[$ckey]['#attributes']['class'])));
+    }
+
+    $rows[] = $row;
+  }
+
+  // Prevent default rendering of children outside of our themed table.
+  $table['#children'] = '';
+
+  if (empty($rows)) {
+    return '<p>' . t('No components found.') . '</p>';
+  }
+
+  return theme('table', array(
+    'header' => $header,
+    'rows' => $rows,
+    'attributes' => $table['#attributes'],
+  ));
+}
+
+function vforms_node_form_default_redirect($node) {
+  // Redirect /node/N/form -> /node/N/form/default
+  backdrop_goto('node/' . $node->nid . '/form/default');
+}
+
+function vforms_validate_int_string($element, &$form_state) {
+  $v = trim((string) $element['#value']);
+  if ($v !== '' && !ctype_digit($v)) {
+    form_error($element, t('Enter a whole number.'));
+  }
+}
+
+function vforms_node_form_after_build($form, &$form_state) {
+  if (empty($form['#node']) || empty($form['#node']->type) || empty($form_state['vforms_variant'])) {
+    return $form;
+  }
+
+  $bundle = $form['#node']->type;
+  $variant_key = (string) $form_state['vforms_variant'];
+
+  vforms_apply_variant('node', $bundle, $variant_key, $form, $form_state);
+
+  if (!empty($form_state['vforms_dialog'])) {
+    vforms_make_node_form_dialog($form, $form_state, $variant_key);
+  }
+
+  return $form;
+}
+
+function vforms_after_build_reapply_variant($form, &$form_state) {
+  if (empty($form['#node']) || empty($form['#node']->type)) {
+    return $form;
+  }
+  if (empty($form_state['vforms_variant'])) {
+    return $form;
+  }
+
+  $bundle = $form['#node']->type;
+  $variant_key = (string) $form_state['vforms_variant'];
+
+  $variant = vforms_variant_get('node', $bundle, $variant_key);
+  if (empty($variant['components']) || !is_array($variant['components'])) {
+    return $form;
+  }
+
+  // Only re-assert include/weight late in the pipeline.
+  foreach ($variant['components'] as $key => $cfg) {
+    if (!is_array($cfg)) {
+      continue;
+    }
+
+    $parts = explode(':', $key, 2);
+    if (count($parts) !== 2) {
+      continue;
+    }
+    list($kind, $name) = $parts;
+
+    $include = !empty($cfg['include']);
+    $weight  = (isset($cfg['weight']) && is_numeric($cfg['weight'])) ? (int) $cfg['weight'] : NULL;
+
+    // 1) Root-level element?
+    if (isset($form[$name]) && is_array($form[$name])) {
+      if (!$include) {
+        $form[$name]['#access'] = FALSE;
+      }
+      elseif ($weight !== NULL) {
+        $form[$name]['#weight'] = $weight;
+      }
+      continue;
+    }
+
+    // 2) If it was grouped earlier, it lives under vforms_group__*.
+    foreach ($form as $k => &$container) {
+      if (strpos($k, 'vforms_group__') !== 0) {
+        continue;
+      }
+      if (isset($container[$name]) && is_array($container[$name])) {
+        if (!$include) {
+          $container[$name]['#access'] = FALSE;
+        }
+        elseif ($weight !== NULL) {
+          $container[$name]['#weight'] = $weight;
+        }
+        break;
+      }
+    }
+    unset($container);
+  }
+
+  return $form;
+}
+
+/**
+ * After-build: re-assert component include/exclude + weights.
+ *
+ * This runs late enough to catch elements added by other modules after our
+ * hook_form_node_form_alter() execution (notably Path module's $form['path']).
+ */
+function vforms_after_build_reassert_weights($form, &$form_state) {
+  if (empty($form_state['vforms_variant']) || empty($form_state['vforms_bundle'])) {
+    return $form;
+  }
+
+  $variant_key = (string) $form_state['vforms_variant'];
+  $bundle      = (string) $form_state['vforms_bundle'];
+
+  $variant = vforms_variant_get('node', $bundle, $variant_key);
+  if (empty($variant['components']) || !is_array($variant['components'])) {
+    return $form;
+  }
+
+  $admin_extras_mode = vforms_variant_admin_extras_mode($variant);
+
+  // Track Title config so we can optionally wrap it into a container.
+  // Some themes/templates print $form['title'] explicitly (outside of
+  // drupal_render_children()), which makes reordering by #weight ineffective.
+  $title_cfg = NULL;
+
+  foreach ($variant['components'] as $ckey => $cfg) {
+    if (!is_array($cfg)) {
+      continue;
+    }
+
+    $parts = explode(':', $ckey, 2);
+    if (count($parts) !== 2) {
+      continue;
+    }
+    list($kind, $name) = $parts;
+
+    $include = !empty($cfg['include']);
+
+    // If the variant is configured to exclude administrative extras, force-hide
+    // all "extra" components except Title.
+    if ($admin_extras_mode === 'exclude' && $kind === 'extra' && $name !== 'title') {
+      $include = FALSE;
+    }
+
+    // Apply exclude late (catching elements added after our early alter).
+    if (!$include) {
+      // Special-case: core Title element is a wrapper with a nested textfield.
+      if ($kind === 'extra' && $name === 'title' && isset($form['title']['title'])) {
+        $form['title']['#access'] = FALSE;
+        $form['title']['title']['#access'] = FALSE;
+      }
+      else {
+        vforms_set_access_recursive($form, $name, FALSE);
+      }
+      continue;
+    }
+
+    // Remember Title config (even if we don't wrap it).
+    if ($kind === 'extra' && $name === 'title') {
+      $title_cfg = array(
+        'include' => 1,
+        'weight' => (isset($cfg['weight']) && is_numeric($cfg['weight'])) ? (int) $cfg['weight'] : NULL,
+        'group'  => isset($cfg['group']) ? (string) $cfg['group'] : '',
+      );
+    }
+
+    // Apply weights late.
+    if (isset($cfg['weight']) && is_numeric($cfg['weight'])) {
+      $w = (int) $cfg['weight'];
+      if ($kind === 'extra' && $name === 'title' && isset($form['title']['title'])) {
+        $form['title']['#weight'] = $w;
+        $form['title']['title']['#weight'] = $w;
+      }
+      else {
+        vforms_set_weight_recursive($form, $name, $w);
+      }
+    }
+  }
+
+  // If Title is included and not explicitly grouped, wrap it so it participates
+  // in normal child rendering order (and is not pinned by templates that render
+  // $form['title'] in a fixed position).
+  if (!empty($title_cfg['include']) && trim($title_cfg['group']) === '') {
+    $w = ($title_cfg['weight'] !== NULL) ? (int) $title_cfg['weight'] : NULL;
+    vforms_wrap_title_in_container($form, $w);
+  }
+
+  // If excluding administrative extras, also hide any remaining sections that
+  // point at the "Additional settings" vertical tabs.
+  if ($admin_extras_mode === 'exclude') {
+    vforms_force_hide_admin_sections($form);
+  }
+
+  // Evaluate whether Additional settings is empty *after* all modules have
+  // altered the form (notably Path/Menu). This avoids hiding the wrapper
+  // before late-added grouped fieldsets exist.
+  vforms_hide_empty_additional_settings($form);
+
+  return $form;
+}
+
+/**
+ * Find an element anywhere in the form array and set its #weight.
+ * Returns TRUE if found.
+ */
+function vforms_set_weight_recursive(array &$element, $target_key, $weight) {
+  if (isset($element[$target_key]) && is_array($element[$target_key])) {
+    $element[$target_key]['#weight'] = (int) $weight;
+    return TRUE;
+  }
+
+  foreach (element_children($element) as $child_key) {
+    if (isset($element[$child_key]) && is_array($element[$child_key])) {
+      if (vforms_set_weight_recursive($element[$child_key], $target_key, $weight)) {
+        return TRUE;
+      }
+    }
+  }
+
+  return FALSE;
+}
+
+/**
+ * Find an element anywhere in the form array and set its #access.
+ * Returns TRUE if found.
+ */
+function vforms_set_access_recursive(array &$element, $target_key, $access) {
+  if (isset($element[$target_key]) && is_array($element[$target_key])) {
+    $element[$target_key]['#access'] = $access;
+    return TRUE;
+  }
+
+  foreach (element_children($element) as $child_key) {
+    if (isset($element[$child_key]) && is_array($element[$child_key])) {
+      if (vforms_set_access_recursive($element[$child_key], $target_key, $access)) {
+        return TRUE;
+      }
+    }
+  }
+
+  return FALSE;
+}
+
+function vforms_ajax_command_reload() {
+  return array(
+    'command' => 'vformsReload',
+  );
+}
