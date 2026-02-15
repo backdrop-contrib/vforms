@@ -4,4 +4,5 @@ package = User Interface
 type = module
 backdrop = 1.x
 version = 1.x-0.302
+
 # JS/CSS are exposed via hook_library_info() and attached only when needed.
