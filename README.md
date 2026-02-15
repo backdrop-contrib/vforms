@@ -83,4 +83,4 @@ Credits
 
 ## License
 
-GPL v2 or later.
+This project is GPL v2 software. See the LICENSE.txt file in this directory for complete text.
