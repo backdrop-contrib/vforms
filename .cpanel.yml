@@ -1,0 +1,14 @@
+---
+deployment:
+  tasks:
+    # Added comment for git happiness
+    - /bin/echo "==== DEPLOY START $(date) ====" >> /home/blangblo/repositories/deploy.log
+
+    # Ensure targets exist
+    - /bin/mkdir -p /home/blangblo/pmpm/modules/vforms
+
+    # Mirror module from repo → live (deletes removed files)
+    - /bin/rsync -av --delete --exclude=.git/ --exclude=.github/ --exclude=.vscode/ --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r /home/blangblo/repositories/vforms/ /home/blangblo/pmpm/modules/vforms/ >> /home/blangblo/repositories/deploy.log 2>&1 || /bin/echo "RSYNC_MOD_FAIL code=$?" >> /home/blangblo/repositories/deploy.log
+
+    # End marker with SHA
+    - /bin/echo "==== DEPLOY END $(date)  SHA-> $(/usr/bin/git -C /home/blangblo/repositories/vforms rev-parse --short HEAD) ====" >> /home/blangblo/repositories/deploy.log
