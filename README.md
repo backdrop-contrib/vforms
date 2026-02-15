@@ -41,7 +41,7 @@ Look for permissions under the `vforms` module section.
 For each content type:
 
 - Go to: **Administration → Structure → Content types**
-- Click **Manage form variants** (or similar link provided by the module) for the type.
+- Click **Form variants** for the type.
 
 Variant edit path pattern:
 
