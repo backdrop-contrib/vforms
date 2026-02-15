@@ -16,6 +16,7 @@ Node Form Variants lets you create and manage multiple **edit-form layouts** (â€
   - **closed** (collapsible, initially closed)
   - **locked open** (non-collapsible)
 - Stores configuration in Backdropâ€™s config system (exportable/importable).
+- Provides a **Form variant edit link** Views field
 
 ## Requirements
 
