@@ -2,8 +2,20 @@
 
 Node Form Variants lets you create and manage multiple **edit-form layouts** (“variants”) per content type. Each variant can include/exclude fields, change ordering, and optionally organize fields into groups.
 
-**Machine name:** `vforms`  
-**Title (project):** Node Form Variants
+This module lets you define multiple “layouts” for the node edit form of a content type, then choose which layout to use when editing.
+A concrete use-case:
+You have a content type like Work Order with 40+ fields. Different people touch different subsets of those fields.
+- Intake variant (front desk / CSR): only customer, contact, short description, priority.
+- Production variant (shop lead): materials, routing, quantities, due dates.
+- QA variant: inspection fields, sign-off, attachments.
+- Admin variant: everything, including rarely-used metadata fields.
+
+Without vforms, everyone edits the same long form, leading to:
+- slower data entry (scrolling and hunting),
+- more mistakes (editing fields they shouldn’t touch),
+- poorer usability on mobile/tablet.
+
+With vforms, you create those variants once, and then provide links (including Views “edit using variant” links) that open the right form for the right workflow. It’s essentially “multiple tailored edit screens for the same content type,” without creating duplicate content types or writing custom form-alter code per workflow.
 
 ## Features
 
