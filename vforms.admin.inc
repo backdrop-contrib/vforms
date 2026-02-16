@@ -48,7 +48,13 @@ function vforms_admin_overview_form($form, &$form_state, $node_type) {
   );
 
   $form['help'] = array(
-    '#markup' => '<p>' . t('Form variants let you show/hide and reorder fields (and some extra elements) on the node edit form.') . '</p>',
+    '#markup' => '<p>' . t('Form variants let you show/hide and reorder fields (and some extra elements) on the node edit form. The table below lists all variants configured for this content type. Use the "Configure" link to edit a variant, or "Clone" to create a new variant based on an existing one.') . '</p>'
+      . '<hr><p>' . t('The Variant routing settings let you select a variant to use for the standard Edit tab and node creation form, and optionally open those in a modal dialog.') . '</p>'
+      . '<p>' . t('The following paths are available for direct linking to a specific variant:') . '<ul><li>'
+      . t('Edit node:&emsp; `node/{nid}/form/{variant_key}`') . '</li><li>' 
+      . t('Create node: `node/add/{content_type}/form/{variant_key}`') . '</li></ul>'
+      . t('&emsp;&emsp;&emsp; where {variant_key} is the machine name of the variant you want to use (e.g. `default` or `quick`).')
+      . '<p>' . t('DEVEL NOTE: Not all of the Variant routing functionality (below) works yet. Work is ongoing...') . '</p>',
   );
 
   $form['behavior'] = array(
