@@ -34,8 +34,13 @@ function vforms_admin_overview_form($form, &$form_state, $node_type) {
   // Current settings.
   $edit_enabled = !empty($settings['edit_tab']['enabled']) ? 1 : 0;
   $edit_variant = !empty($settings['edit_tab']['variant']) ? (string) $settings['edit_tab']['variant'] : 'default';
+  $edit_dialog = !empty($settings['edit_tab']['dialog']) ? 1 : 0;
+  $edit_dialog_width = !empty($settings['edit_tab']['dialog_width']) ? (int) $settings['edit_tab']['dialog_width'] : 900;
+
   $create_enabled = !empty($settings['create']['enabled']) ? 1 : 0;
   $create_variant = !empty($settings['create']['variant']) ? (string) $settings['create']['variant'] : 'default';
+  $create_dialog = !empty($settings['create']['dialog']) ? 1 : 0;
+  $create_dialog_width = !empty($settings['create']['dialog_width']) ? (int) $settings['create']['dialog_width'] : 900;
 
   $form['bundle'] = array(
     '#type' => 'value',
@@ -71,7 +76,33 @@ function vforms_admin_overview_form($form, &$form_state, $node_type) {
     ),
   );
 
-  $form['behavior']['use_create_variant'] = array(
+  
+  $form['behavior']['edit_tab_dialog'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Open Edit tab in popup dialog'),
+    '#default_value' => $edit_dialog,
+    '#states' => array(
+      'visible' => array(
+        ':input[name="use_edit_tab_variant"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
+
+  $form['behavior']['edit_tab_dialog_width'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Edit dialog width'),
+    '#default_value' => $edit_dialog_width,
+    '#size' => 6,
+    '#states' => array(
+      'visible' => array(
+        ':input[name="use_edit_tab_variant"]' => array('checked' => TRUE),
+        ':input[name="edit_tab_dialog"]' => array('checked' => TRUE),
+      ),
+    ),
+    '#description' => t('Width in pixels.'),
+  );
+
+$form['behavior']['use_create_variant'] = array(
     '#type' => 'checkbox',
     '#title' => t('Use variant form for creating new content'),
     '#default_value' => $create_enabled,
@@ -90,7 +121,33 @@ function vforms_admin_overview_form($form, &$form_state, $node_type) {
     '#description' => t('This affects the standard path node/add/@type.', array('@type' => $bundle)),
   );
 
-  $form['behavior']['note'] = array(
+  
+  $form['behavior']['create_dialog'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Open Create form in popup dialog'),
+    '#default_value' => $create_dialog,
+    '#states' => array(
+      'visible' => array(
+        ':input[name="use_create_variant"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
+
+  $form['behavior']['create_dialog_width'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Create dialog width'),
+    '#default_value' => $create_dialog_width,
+    '#size' => 6,
+    '#states' => array(
+      'visible' => array(
+        ':input[name="use_create_variant"]' => array('checked' => TRUE),
+        ':input[name="create_dialog"]' => array('checked' => TRUE),
+      ),
+    ),
+    '#description' => t('Width in pixels.'),
+  );
+
+$form['behavior']['note'] = array(
     '#markup' => '<div class="description">' . t('Note: Non-default variants require the permission "Use non-default form variants".') . '</div>',
   );
 
@@ -153,10 +210,14 @@ function vforms_admin_overview_form_submit($form, &$form_state) {
     'edit_tab' => array(
       'enabled' => !empty($form_state['values']['use_edit_tab_variant']) ? 1 : 0,
       'variant' => !empty($form_state['values']['edit_tab_variant']) ? (string) $form_state['values']['edit_tab_variant'] : 'default',
+      'dialog' => !empty($form_state['values']['edit_tab_dialog']) ? 1 : 0,
+      'dialog_width' => !empty($form_state['values']['edit_tab_dialog_width']) ? (int) $form_state['values']['edit_tab_dialog_width'] : 900,
     ),
     'create' => array(
       'enabled' => !empty($form_state['values']['use_create_variant']) ? 1 : 0,
       'variant' => !empty($form_state['values']['create_variant']) ? (string) $form_state['values']['create_variant'] : 'default',
+      'dialog' => !empty($form_state['values']['create_dialog']) ? 1 : 0,
+      'dialog_width' => !empty($form_state['values']['create_dialog_width']) ? (int) $form_state['values']['create_dialog_width'] : 900,
     ),
   );
 
