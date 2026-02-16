@@ -167,7 +167,48 @@ function vforms_menu() {
     'type' => MENU_CALLBACK,
   );
 
+
+  // Variant node add routes.
+  // Example: /node/add/page/form/quick
+  $items['node/add/%node_type/form'] = array(
+    'title' => 'Form',
+    'page callback' => 'vforms_node_add_form_default_redirect',
+    'page arguments' => array(2),
+    'access callback' => 'vforms_node_add_variant_access',
+    'access arguments' => array(2, 'default'),
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['node/add/%node_type/form/%vforms_variant'] = array(
+    'title callback' => 'vforms_node_add_variant_title',
+    'title arguments' => array(2, 4),
+    'page callback' => 'vforms_node_add_variant_page',
+    'page arguments' => array(2, 4),
+    'access callback' => 'vforms_node_add_variant_access',
+    'access arguments' => array(2, 4),
+    'type' => MENU_CALLBACK,
+  );
+
   return $items;
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function vforms_menu_alter(&$items) {
+  // Wrap the core node edit route (node/%node/edit) so the Edit tab can use a
+  // configured form variant.
+  if (isset($items['node/%node/edit'])) {
+    $items['node/%node/edit']['page callback'] = 'vforms_node_edit_wrapper';
+    $items['node/%node/edit']['page arguments'] = array(1);
+  }
+
+  // Wrap the core node add route (node/add/%node_type) so Create links can use a
+  // configured form variant.
+  if (isset($items['node/add/%node_type'])) {
+    $items['node/add/%node_type']['page callback'] = 'vforms_node_add_wrapper';
+    $items['node/add/%node_type']['page arguments'] = array(2);
+  }
 }
 
 /**
@@ -1145,6 +1186,20 @@ function theme_vforms_components_table($variables) {
 function vforms_node_form_default_redirect($node) {
   // Redirect /node/N/form -> /node/N/form/default
   backdrop_goto('node/' . $node->nid . '/form/default');
+}
+
+function vforms_node_add_form_default_redirect($node_type) {
+  $bundle = (is_object($node_type) && !empty($node_type->type))
+    ? (string) $node_type->type
+    : (string) $node_type;
+
+  if ($bundle === '') {
+    backdrop_not_found();
+    return;
+  }
+
+  // Redirect /node/add/{type}/form -> /node/add/{type}/form/default
+  backdrop_goto('node/add/' . $bundle . '/form/default');
 }
 
 function vforms_validate_int_string($element, &$form_state) {
