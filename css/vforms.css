@@ -1,0 +1,7 @@
+/* Icon scales with whatever font-size the surrounding text already has */
+.views-field-vforms-edit-link svg.icon {
+  width: 1.2em;
+  height: 1.2em;
+  vertical-align: middle;
+}
+
