@@ -7,24 +7,100 @@
  */
 
 function vforms_admin_overview($node_type) {
-  // /admin/structure/types/manage/{bundle}/vforms
-  $args = arg();
-  $bundle = isset($args[4]) ? $args[4] : '';
+  return backdrop_get_form('vforms_admin_overview_form', $node_type);
+}
+
+function vforms_admin_overview_form($form, &$form_state, $node_type) {
+  $bundle = vforms_bundle_from_node_type($node_type);
   if ($bundle === '') {
     return array('#markup' => t('Could not determine content type.'));
   }
 
-  // Ensure dropbutton JS/CSS is present.
+  // Ensure dropbutton JS/CSS is present for the Operations column.
   backdrop_add_library('system', 'dropbutton');
 
-  $variants = vforms_variants_all('node', $bundle);
-
   // Ensure a stored "default" exists as a baseline.
-  if (empty($variants['default'])) {
-    $variants['default'] = vforms_variant_build_default('node', $bundle);
-    vforms_variant_set('node', $bundle, 'default', $variants['default']);
+  vforms_variant_get('node', $bundle, 'default');
+
+  $variants = vforms_variants_all('node', $bundle);
+  $settings = vforms_bundle_settings_get('node', $bundle);
+
+  $variant_options = array();
+  foreach ($variants as $key => $variant) {
+    $label = !empty($variant['label']) ? $variant['label'] : $key;
+    $variant_options[$key] = $label . ' (' . $key . ')';
   }
 
+  // Current settings.
+  $edit_enabled = !empty($settings['edit_tab']['enabled']) ? 1 : 0;
+  $edit_variant = !empty($settings['edit_tab']['variant']) ? (string) $settings['edit_tab']['variant'] : 'default';
+  $create_enabled = !empty($settings['create']['enabled']) ? 1 : 0;
+  $create_variant = !empty($settings['create']['variant']) ? (string) $settings['create']['variant'] : 'default';
+
+  $form['bundle'] = array(
+    '#type' => 'value',
+    '#value' => $bundle,
+  );
+
+  $form['help'] = array(
+    '#markup' => '<p>' . t('Form variants let you show/hide and reorder fields (and some extra elements) on the node edit form.') . '</p>',
+  );
+
+  $form['behavior'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Variant routing'),
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
+  );
+
+  $form['behavior']['use_edit_tab_variant'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Use variant form for Local tasks Edit button'),
+    '#default_value' => $edit_enabled,
+  );
+
+  $form['behavior']['edit_tab_variant'] = array(
+    '#type' => 'select',
+    '#title' => t('Variant to use for Edit tab'),
+    '#options' => $variant_options,
+    '#default_value' => $edit_variant,
+    '#states' => array(
+      'visible' => array(
+        ':input[name="use_edit_tab_variant"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
+
+  $form['behavior']['use_create_variant'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Use variant form for creating new content'),
+    '#default_value' => $create_enabled,
+  );
+
+  $form['behavior']['create_variant'] = array(
+    '#type' => 'select',
+    '#title' => t('Variant to use for Create form'),
+    '#options' => $variant_options,
+    '#default_value' => $create_variant,
+    '#states' => array(
+      'visible' => array(
+        ':input[name="use_create_variant"]' => array('checked' => TRUE),
+      ),
+    ),
+    '#description' => t('This affects the standard path node/add/@type.', array('@type' => $bundle)),
+  );
+
+  $form['behavior']['note'] = array(
+    '#markup' => '<div class="description">' . t('Note: Non-default variants require the permission "Use non-default form variants".') . '</div>',
+  );
+
+  $form['actions'] = array('#type' => 'actions');
+  $form['actions']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save settings'),
+  );
+
+  // Variants table.
   $rows = array();
   foreach ($variants as $key => $variant) {
     $label = !empty($variant['label']) ? $variant['label'] : $key;
@@ -54,30 +130,40 @@ function vforms_admin_overview($node_type) {
     );
 
     $rows[] = array(
-      check_plain($label),           // Label
-      check_plain($key),             // Machine name
-      backdrop_render($drop),        // Operations (dropdown)
+      check_plain($label),
+      check_plain($key),
+      backdrop_render($drop),
     );
   }
 
-  $build = array();
-  $build['help'] = array(
-    '#markup' => '<p>' . t('Form variants let you show/hide and reorder fields (and some extra elements) on the node edit form.') . '</p>',
-  );
-
-  if (empty($rows)) {
-    $build['table'] = array('#markup' => '<p>' . t('No variants defined.') . '</p>');
-    return $build;
-  }
-
-  $build['table'] = array(
+  $form['variants_table'] = array(
     '#markup' => theme('table', array(
       'header' => array(t('Label'), t('Machine name'), t('Operations')),
       'rows' => $rows,
     )),
   );
 
-  return $build;
+  return $form;
+}
+
+function vforms_admin_overview_form_submit($form, &$form_state) {
+  $bundle = (string) $form_state['values']['bundle'];
+
+  $settings = array(
+    'edit_tab' => array(
+      'enabled' => !empty($form_state['values']['use_edit_tab_variant']) ? 1 : 0,
+      'variant' => !empty($form_state['values']['edit_tab_variant']) ? (string) $form_state['values']['edit_tab_variant'] : 'default',
+    ),
+    'create' => array(
+      'enabled' => !empty($form_state['values']['use_create_variant']) ? 1 : 0,
+      'variant' => !empty($form_state['values']['create_variant']) ? (string) $form_state['values']['create_variant'] : 'default',
+    ),
+  );
+
+  vforms_bundle_settings_set('node', $bundle, $settings);
+  backdrop_set_message(t('Settings saved.'), 'status');
+
+  $form_state['redirect'] = current_path();
 }
 
 function vforms_admin_variant_form($form, &$form_state, $node_type, $variant_key = NULL) {
