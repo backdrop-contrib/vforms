@@ -7,24 +7,163 @@
  */
 
 function vforms_admin_overview($node_type) {
-  // /admin/structure/types/manage/{bundle}/vforms
-  $args = arg();
-  $bundle = isset($args[4]) ? $args[4] : '';
+  return backdrop_get_form('vforms_admin_overview_form', $node_type);
+}
+
+function vforms_admin_overview_form($form, &$form_state, $node_type) {
+  $bundle = vforms_bundle_from_node_type($node_type);
   if ($bundle === '') {
     return array('#markup' => t('Could not determine content type.'));
   }
 
-  // Ensure dropbutton JS/CSS is present.
+  // Ensure dropbutton JS/CSS is present for the Operations column.
   backdrop_add_library('system', 'dropbutton');
 
-  $variants = vforms_variants_all('node', $bundle);
-
   // Ensure a stored "default" exists as a baseline.
-  if (empty($variants['default'])) {
-    $variants['default'] = vforms_variant_build_default('node', $bundle);
-    vforms_variant_set('node', $bundle, 'default', $variants['default']);
+  vforms_variant_get('node', $bundle, 'default');
+
+  $variants = vforms_variants_all('node', $bundle);
+  $settings = vforms_bundle_settings_get('node', $bundle);
+
+  $variant_options = array();
+  foreach ($variants as $key => $variant) {
+    $label = !empty($variant['label']) ? $variant['label'] : $key;
+    $variant_options[$key] = $label . ' (' . $key . ')';
   }
 
+  // Current settings.
+  $edit_enabled = !empty($settings['edit_tab']['enabled']) ? 1 : 0;
+  $edit_variant = !empty($settings['edit_tab']['variant']) ? (string) $settings['edit_tab']['variant'] : 'default';
+  $edit_dialog = !empty($settings['edit_tab']['dialog']) ? 1 : 0;
+  $edit_dialog_width = !empty($settings['edit_tab']['dialog_width']) ? (int) $settings['edit_tab']['dialog_width'] : 900;
+
+  $create_enabled = !empty($settings['create']['enabled']) ? 1 : 0;
+  $create_variant = !empty($settings['create']['variant']) ? (string) $settings['create']['variant'] : 'default';
+  $create_dialog = !empty($settings['create']['dialog']) ? 1 : 0;
+  $create_dialog_width = !empty($settings['create']['dialog_width']) ? (int) $settings['create']['dialog_width'] : 900;
+
+  $form['bundle'] = array(
+    '#type' => 'value',
+    '#value' => $bundle,
+  );
+
+  $form['help'] = array(
+    '#markup' => '<p>' . t('Form variants let you show/hide and reorder fields (and some extra elements) on the node edit form. The table below lists all variants configured for this content type. Use the "Configure" link to edit a variant, or "Clone" to create a new variant based on an existing one.') . '</p>'
+      . '<hr><p>' . t('The Variant routing settings let you select a variant to use for the standard Edit tab and node creation form, and optionally open those in a modal dialog.') . '</p>'
+      . '<p>' . t('The following paths are available for direct linking to a specific variant:') . '<ul><li>'
+      . t('Edit node:&emsp; `node/{nid}/form/{variant_key}`') . '</li><li>' 
+      . t('Create node: `node/add/{content_type}/form/{variant_key}`') . '</li></ul>'
+      . t('&emsp;&emsp;&emsp; where {variant_key} is the machine name of the variant you want to use (e.g. `default` or `quick`).')
+      . '<p>' . t('DEVEL NOTE: Not all of the Variant routing functionality (below) works yet. Work is ongoing...') . '</p>',
+  );
+
+  $form['behavior'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Variant routing'),
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
+  );
+
+  $form['behavior']['use_edit_tab_variant'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Use variant form for Local tasks Edit button'),
+    '#default_value' => $edit_enabled,
+  );
+
+  $form['behavior']['edit_tab_variant'] = array(
+    '#type' => 'select',
+    '#title' => t('Variant to use for Edit tab'),
+    '#options' => $variant_options,
+    '#default_value' => $edit_variant,
+    '#states' => array(
+      'visible' => array(
+        ':input[name="use_edit_tab_variant"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
+
+  
+  $form['behavior']['edit_tab_dialog'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Open Edit tab in popup dialog'),
+    '#default_value' => $edit_dialog,
+    '#states' => array(
+      'visible' => array(
+        ':input[name="use_edit_tab_variant"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
+
+  $form['behavior']['edit_tab_dialog_width'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Edit dialog width'),
+    '#default_value' => $edit_dialog_width,
+    '#size' => 6,
+    '#states' => array(
+      'visible' => array(
+        ':input[name="use_edit_tab_variant"]' => array('checked' => TRUE),
+        ':input[name="edit_tab_dialog"]' => array('checked' => TRUE),
+      ),
+    ),
+    '#description' => t('Width in pixels.'),
+  );
+
+$form['behavior']['use_create_variant'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Use variant form for creating new content'),
+    '#default_value' => $create_enabled,
+  );
+
+  $form['behavior']['create_variant'] = array(
+    '#type' => 'select',
+    '#title' => t('Variant to use for Create form'),
+    '#options' => $variant_options,
+    '#default_value' => $create_variant,
+    '#states' => array(
+      'visible' => array(
+        ':input[name="use_create_variant"]' => array('checked' => TRUE),
+      ),
+    ),
+    '#description' => t('This affects the standard path node/add/@type.', array('@type' => $bundle)),
+  );
+
+  
+  $form['behavior']['create_dialog'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Open Create form in popup dialog'),
+    '#default_value' => $create_dialog,
+    '#states' => array(
+      'visible' => array(
+        ':input[name="use_create_variant"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
+
+  $form['behavior']['create_dialog_width'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Create dialog width'),
+    '#default_value' => $create_dialog_width,
+    '#size' => 6,
+    '#states' => array(
+      'visible' => array(
+        ':input[name="use_create_variant"]' => array('checked' => TRUE),
+        ':input[name="create_dialog"]' => array('checked' => TRUE),
+      ),
+    ),
+    '#description' => t('Width in pixels.'),
+  );
+
+$form['behavior']['note'] = array(
+    '#markup' => '<div class="description">' . t('Note: Non-default variants require the permission "Use non-default form variants".') . '</div>',
+  );
+
+  $form['actions'] = array('#type' => 'actions');
+  $form['actions']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save settings'),
+  );
+
+  // Variants table.
   $rows = array();
   foreach ($variants as $key => $variant) {
     $label = !empty($variant['label']) ? $variant['label'] : $key;
@@ -54,30 +193,44 @@ function vforms_admin_overview($node_type) {
     );
 
     $rows[] = array(
-      check_plain($label),           // Label
-      check_plain($key),             // Machine name
-      backdrop_render($drop),        // Operations (dropdown)
+      check_plain($label),
+      check_plain($key),
+      backdrop_render($drop),
     );
   }
 
-  $build = array();
-  $build['help'] = array(
-    '#markup' => '<p>' . t('Form variants let you show/hide and reorder fields (and some extra elements) on the node edit form.') . '</p>',
-  );
-
-  if (empty($rows)) {
-    $build['table'] = array('#markup' => '<p>' . t('No variants defined.') . '</p>');
-    return $build;
-  }
-
-  $build['table'] = array(
+  $form['variants_table'] = array(
     '#markup' => theme('table', array(
       'header' => array(t('Label'), t('Machine name'), t('Operations')),
       'rows' => $rows,
     )),
   );
 
-  return $build;
+  return $form;
+}
+
+function vforms_admin_overview_form_submit($form, &$form_state) {
+  $bundle = (string) $form_state['values']['bundle'];
+
+  $settings = array(
+    'edit_tab' => array(
+      'enabled' => !empty($form_state['values']['use_edit_tab_variant']) ? 1 : 0,
+      'variant' => !empty($form_state['values']['edit_tab_variant']) ? (string) $form_state['values']['edit_tab_variant'] : 'default',
+      'dialog' => !empty($form_state['values']['edit_tab_dialog']) ? 1 : 0,
+      'dialog_width' => !empty($form_state['values']['edit_tab_dialog_width']) ? (int) $form_state['values']['edit_tab_dialog_width'] : 900,
+    ),
+    'create' => array(
+      'enabled' => !empty($form_state['values']['use_create_variant']) ? 1 : 0,
+      'variant' => !empty($form_state['values']['create_variant']) ? (string) $form_state['values']['create_variant'] : 'default',
+      'dialog' => !empty($form_state['values']['create_dialog']) ? 1 : 0,
+      'dialog_width' => !empty($form_state['values']['create_dialog_width']) ? (int) $form_state['values']['create_dialog_width'] : 900,
+    ),
+  );
+
+  vforms_bundle_settings_set('node', $bundle, $settings);
+  backdrop_set_message(t('Settings saved.'), 'status');
+
+  $form_state['redirect'] = current_path();
 }
 
 function vforms_admin_variant_form($form, &$form_state, $node_type, $variant_key = NULL) {

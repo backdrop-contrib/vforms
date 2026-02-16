@@ -106,7 +106,7 @@ function vforms_menu() {
     'access arguments' => array('administer vforms'),
     'type' => MENU_LOCAL_TASK,
     'file' => 'vforms.admin.inc',
-    'weight' => 1,
+    'weight' => 2,
   );
 
   $items['admin/structure/types/manage/%node_type/vforms/add'] = array(
@@ -167,7 +167,66 @@ function vforms_menu() {
     'type' => MENU_CALLBACK,
   );
 
+
+  // Variant node add routes.
+  // Example: /node/add/page/form/quick
+  $items['node/add/%node_type/form'] = array(
+    'title' => 'Form',
+    'page callback' => 'vforms_node_add_form_default_redirect',
+    'page arguments' => array(2),
+    'access callback' => 'vforms_node_add_variant_access',
+    'access arguments' => array(2, 'default'),
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['node/add/%node_type/form/%vforms_variant'] = array(
+    'title callback' => 'vforms_node_add_variant_title',
+    'title arguments' => array(2, 4),
+    'page callback' => 'vforms_node_add_variant_page',
+    'page arguments' => array(2, 4),
+    'access callback' => 'vforms_node_add_variant_access',
+    'access arguments' => array(2, 4),
+    'type' => MENU_CALLBACK,
+  );
+
+
+  $items['node/add/%node_type/form/%vforms_variant/dialog'] = array(
+    'title callback' => 'vforms_node_add_variant_title',
+    'title arguments' => array(2, 4),
+    'page callback' => 'vforms_node_add_variant_dialog_page',
+    'page arguments' => array(2, 4),
+    'access callback' => 'vforms_node_add_variant_access',
+    'access arguments' => array(2, 4),
+    'type' => MENU_CALLBACK,
+  );
+
   return $items;
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function vforms_menu_alter(&$items) {
+  // Wrap the core node edit route (node/%node/edit) so the Edit tab can use a
+  // configured form variant.
+  if (isset($items['node/%node/edit'])) {
+    $items['node/%node/edit']['page callback'] = 'vforms_node_edit_wrapper';
+    $items['node/%node/edit']['page arguments'] = array(1);
+  }
+
+  // Wrap the core node add route (node/add/%...) so Create links can use a
+  // configured form variant.
+  foreach ($items as $path => &$item) {
+    // Backdrop core typically uses node/add/%node_type, but some installs/modules
+    // may register it as node/add/%.
+    if (preg_match('~^node/add/%[^/]+$~', $path)) {
+      $item['page callback'] = 'vforms_node_add_wrapper';
+      if (empty($item['page arguments']) || !is_array($item['page arguments'])) {
+        $item['page arguments'] = array(2);
+      }
+    }
+  }
+  unset($item);
 }
 
 /**
@@ -246,6 +305,281 @@ function vforms_node_variant_dialog_page($node, $variant_key) {
   include_once backdrop_get_path('module', 'node') . '/node.pages.inc';
   return node_page_edit($node);
 }
+
+/**
+ * Wrapper for the core node edit route (node/%node/edit).
+ *
+ * When enabled in the bundle settings, this redirects to the configured variant
+ * route: node/N/form/{variant}.
+ */
+function vforms_node_edit_wrapper($node) {
+  if (!empty($node->type)) {
+    $bundle = (string) $node->type;
+    $settings = vforms_bundle_settings_get('node', $bundle);
+
+    if (!empty($settings['edit_tab']['enabled'])) {
+      $variant_key = !empty($settings['edit_tab']['variant'])
+        ? (string) $settings['edit_tab']['variant']
+        : 'default';
+
+      // Enforce permissions for non-default variants.
+      if ($variant_key !== 'default' && !user_access('use vforms variants')) {
+        $variant_key = 'default';
+      }
+
+      // Ensure the variant exists (default will be auto-created).
+      if (!vforms_variant_get('node', $bundle, $variant_key)) {
+        $variant_key = 'default';
+      }
+
+      backdrop_goto('node/' . $node->nid . '/form/' . $variant_key);
+    }
+  }
+
+  include_once backdrop_get_path('module', 'node') . '/node.pages.inc';
+  return node_page_edit($node);
+}
+
+/**
+ * Wrapper for the core node add route (node/add/%node_type).
+ *
+ * When enabled in the bundle settings, this redirects to:
+ * node/add/{type}/form/{variant}.
+ */
+function vforms_node_add_wrapper($node_type) {
+  $bundle = (is_object($node_type) && !empty($node_type->type))
+    ? (string) $node_type->type
+    : (string) $node_type;
+
+  if ($bundle !== '') {
+    $settings = vforms_bundle_settings_get('node', $bundle);
+
+    if (!empty($settings['create']['enabled'])) {
+      $variant_key = !empty($settings['create']['variant'])
+        ? (string) $settings['create']['variant']
+        : 'default';
+
+      // Enforce permissions for non-default variants.
+      if ($variant_key !== 'default' && !user_access('use vforms variants')) {
+        $variant_key = 'default';
+      }
+
+      // Ensure the variant exists (default will be auto-created).
+      if (!vforms_variant_get('node', $bundle, $variant_key)) {
+        $variant_key = 'default';
+      }
+
+      backdrop_goto('node/add/' . $bundle . '/form/' . $variant_key);
+    }
+  }
+
+  include_once backdrop_get_path('module', 'node') . '/node.pages.inc';
+  return node_add($bundle);
+}
+
+/**
+ * Implements hook_init().
+ *
+ * Adds dialog behavior for "Create content" links on the node/add listing page,
+ * when enabled per content type.
+ */
+function vforms_init() {
+  // Only act on the node/add listing page.
+  if (current_path() !== 'node/add') {
+    return;
+  }
+
+  // Build a map of content types whose Create form should open in a dialog.
+  $map = array();
+
+  // node_type_get_types() returns an array keyed by machine name.
+  if (!function_exists('node_type_get_types')) {
+    return;
+  }
+
+  $types = node_type_get_types();
+  if (!is_array($types) || empty($types)) {
+    return;
+  }
+
+  foreach ($types as $bundle => $info) {
+    $settings = vforms_bundle_settings_get('node', (string) $bundle);
+    if (empty($settings['create']['enabled']) || empty($settings['create']['dialog'])) {
+      continue;
+    }
+
+    $variant_key = !empty($settings['create']['variant']) ? (string) $settings['create']['variant'] : 'default';
+
+    // Enforce permissions for non-default variants.
+    if ($variant_key !== 'default' && !user_access('use vforms variants')) {
+      $variant_key = 'default';
+    }
+
+    // Ensure the variant exists (default will be auto-created).
+    if (!vforms_variant_get('node', $bundle, $variant_key)) {
+      $variant_key = 'default';
+    }
+
+    $w = !empty($settings['create']['dialog_width']) ? (int) $settings['create']['dialog_width'] : 900;
+    if ($w <= 0) {
+      $w = 900;
+    }
+
+    $map[$bundle] = array(
+      'href' => url('node/add/' . $bundle . '/form/' . $variant_key . '/dialog', array(
+        'absolute' => FALSE,
+        'query' => array('destination' => current_path()),
+      )),
+      'width' => $w,
+    );
+  }
+
+  if (empty($map)) {
+    return;
+  }
+
+  // Ensure required client-side behaviors exist on the page.
+  backdrop_add_library('system', 'backdrop.ajax');
+  @backdrop_add_library('system', 'ui.dialog');
+  backdrop_add_library('vforms', 'dialog_target');
+  backdrop_add_library('vforms', 'dialog');
+
+  backdrop_add_js(array('vforms' => array('createDialogLinks' => $map)), 'setting');
+}
+
+/**
+ * Implements hook_node_view().
+ *
+ * When configured, converts the stock "Edit" local task into a dialog link.
+ */
+function vforms_node_view($node, $view_mode, $langcode) {
+  if ($view_mode !== 'full') {
+    return;
+  }
+  if (!function_exists('node_is_page') || !node_is_page($node)) {
+    return;
+  }
+  if (empty($node->type) || empty($node->nid)) {
+    return;
+  }
+
+  $settings = vforms_bundle_settings_get('node', (string) $node->type);
+  if (empty($settings['edit_tab']['enabled']) || empty($settings['edit_tab']['dialog'])) {
+    return;
+  }
+
+  $variant_key = !empty($settings['edit_tab']['variant']) ? (string) $settings['edit_tab']['variant'] : 'default';
+
+  // Enforce permissions for non-default variants.
+  if ($variant_key !== 'default' && !user_access('use vforms variants')) {
+    $variant_key = 'default';
+  }
+
+  // Ensure the variant exists (default will be auto-created).
+  if (!vforms_variant_get('node', $node->type, $variant_key)) {
+    $variant_key = 'default';
+  }
+
+  $w = !empty($settings['edit_tab']['dialog_width']) ? (int) $settings['edit_tab']['dialog_width'] : 900;
+  if ($w <= 0) {
+    $w = 900;
+  }
+
+  backdrop_add_library('system', 'backdrop.ajax');
+  @backdrop_add_library('system', 'ui.dialog');
+  backdrop_add_library('vforms', 'dialog_target');
+  backdrop_add_library('vforms', 'dialog');
+
+  backdrop_add_js(array('vforms' => array(
+    'editTabDialog' => array(
+      'enabled' => 1,
+      'nid' => (int) $node->nid,
+      'href' => url('node/' . $node->nid . '/form/' . $variant_key . '/dialog', array(
+        'absolute' => FALSE,
+        'query' => array('destination' => current_path()),
+      )),
+      'width' => $w,
+    ),
+  )), 'setting');
+}
+
+/**
+ * Title callback for the variant node add route.
+ */
+function vforms_node_add_variant_title($node_type, $variant_key) {
+  $bundle = (is_object($node_type) && !empty($node_type->type))
+    ? (string) $node_type->type
+    : (string) $node_type;
+
+  $type_label = (is_object($node_type) && !empty($node_type->name))
+    ? (string) $node_type->name
+    : $bundle;
+
+  $variant = vforms_variant_get('node', $bundle, $variant_key);
+  $variant_label = (!empty($variant['label']) ? $variant['label'] : $variant_key);
+
+  return t('Create @type (@variant)', array(
+    '@type' => $type_label,
+    '@variant' => $variant_label,
+  ));
+}
+
+/**
+ * Access callback for the variant node add route.
+ */
+function vforms_node_add_variant_access($node_type, $variant_key) {
+  $bundle = (is_object($node_type) && !empty($node_type->type))
+    ? (string) $node_type->type
+    : (string) $node_type;
+
+  if ($bundle === '') {
+    return FALSE;
+  }
+
+  if (!node_access('create', $bundle)) {
+    return FALSE;
+  }
+
+  // Variant must exist (default will be auto-created).
+  $variant = vforms_variant_get('node', $bundle, $variant_key);
+  if (!$variant) {
+    return FALSE;
+  }
+
+  // Default is always allowed; non-default requires permission.
+  if ($variant_key !== 'default' && !user_access('use vforms variants')) {
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+/**
+ * Page callback for the variant node add route.
+ */
+function vforms_node_add_variant_page($node_type, $variant_key) {
+  $bundle = (is_object($node_type) && !empty($node_type->type))
+    ? (string) $node_type->type
+    : (string) $node_type;
+
+  $_GET['vforms_variant'] = $variant_key;
+
+  include_once backdrop_get_path('module', 'node') . '/node.pages.inc';
+  return node_add($bundle);
+}
+
+function vforms_node_add_variant_dialog_page($node_type, $variant_key) {
+  $bundle = (is_object($node_type) && !empty($node_type->type))
+    ? (string) $node_type->type
+    : (string) $node_type;
+
+  $_GET['vforms_variant'] = $variant_key;
+  $_GET['vforms_dialog'] = 1;
+
+  include_once backdrop_get_path('module', 'node') . '/node.pages.inc';
+  return node_add($bundle);
+}
+
 
 /**
  * Implements hook_form_FORM_ID_alter() for all node edit forms.
@@ -759,6 +1093,71 @@ function vforms_config_name($entity_type, $bundle) {
   return 'vforms.' . $entity_type . '.' . $bundle;
 }
 
+/**
+ * Bundle-level settings (per entity type + bundle).
+ *
+ * Stored in the same config object as variants.
+ */
+function vforms_bundle_settings_get($entity_type, $bundle) {
+  $conf = config(vforms_config_name($entity_type, $bundle));
+  $settings = $conf->get('settings');
+  $settings = is_array($settings) ? $settings : array();
+
+  // Defaults.
+  if (empty($settings['edit_tab']) || !is_array($settings['edit_tab'])) {
+    $settings['edit_tab'] = array();
+  }
+  $settings['edit_tab'] += array(
+    'enabled' => 0,
+    'variant' => 'default',
+    'dialog' => 0,
+    'dialog_width' => 900,
+  );
+
+  if (empty($settings['create']) || !is_array($settings['create'])) {
+    $settings['create'] = array();
+  }
+  $settings['create'] += array(
+    'enabled' => 0,
+    'variant' => 'default',
+    'dialog' => 0,
+    'dialog_width' => 900,
+  );
+
+  return $settings;
+}
+
+function vforms_bundle_settings_set($entity_type, $bundle, array $settings) {
+  // Normalize booleans.
+  if (empty($settings['edit_tab']) || !is_array($settings['edit_tab'])) {
+    $settings['edit_tab'] = array();
+  }
+  $settings['edit_tab']['enabled'] = !empty($settings['edit_tab']['enabled']) ? 1 : 0;
+  $settings['edit_tab']['variant'] = !empty($settings['edit_tab']['variant'])
+    ? (string) $settings['edit_tab']['variant']
+    : 'default';
+
+  $settings['edit_tab']['dialog'] = !empty($settings['edit_tab']['dialog']) ? 1 : 0;
+  $w = !empty($settings['edit_tab']['dialog_width']) ? (int) $settings['edit_tab']['dialog_width'] : 0;
+  $settings['edit_tab']['dialog_width'] = ($w > 0) ? $w : 900;
+
+  if (empty($settings['create']) || !is_array($settings['create'])) {
+    $settings['create'] = array();
+  }
+  $settings['create']['enabled'] = !empty($settings['create']['enabled']) ? 1 : 0;
+  $settings['create']['variant'] = !empty($settings['create']['variant'])
+    ? (string) $settings['create']['variant']
+    : 'default';
+
+  $settings['create']['dialog'] = !empty($settings['create']['dialog']) ? 1 : 0;
+  $w = !empty($settings['create']['dialog_width']) ? (int) $settings['create']['dialog_width'] : 0;
+  $settings['create']['dialog_width'] = ($w > 0) ? $w : 900;
+
+  $conf = config(vforms_config_name($entity_type, $bundle));
+  $conf->set('settings', $settings);
+  $conf->save();
+}
+
 function vforms_variants_all($entity_type, $bundle) {
   $conf = config(vforms_config_name($entity_type, $bundle));
   $variants = $conf->get('variants');
@@ -770,6 +1169,14 @@ function vforms_variant_get($entity_type, $bundle, $variant_key) {
   if (!empty($variants[$variant_key]) && is_array($variants[$variant_key])) {
     return $variants[$variant_key];
   }
+
+  // Ensure "default" is always available without requiring an admin visit.
+  if ($variant_key === 'default') {
+    $variant = vforms_variant_build_default($entity_type, $bundle);
+    vforms_variant_set($entity_type, $bundle, 'default', $variant);
+    return $variant;
+  }
+
   return NULL;
 }
 
@@ -947,6 +1354,20 @@ function theme_vforms_components_table($variables) {
 function vforms_node_form_default_redirect($node) {
   // Redirect /node/N/form -> /node/N/form/default
   backdrop_goto('node/' . $node->nid . '/form/default');
+}
+
+function vforms_node_add_form_default_redirect($node_type) {
+  $bundle = (is_object($node_type) && !empty($node_type->type))
+    ? (string) $node_type->type
+    : (string) $node_type;
+
+  if ($bundle === '') {
+    backdrop_not_found();
+    return;
+  }
+
+  // Redirect /node/add/{type}/form -> /node/add/{type}/form/default
+  backdrop_goto('node/add/' . $bundle . '/form/default');
 }
 
 function vforms_validate_int_string($element, &$form_state) {

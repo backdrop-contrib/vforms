@@ -3,6 +3,6 @@ description = Adds configurable form variants for node edit forms: show/hide/reo
 package = User Interface
 type = module
 backdrop = 1.x
-version = 1.x-0.3.3
+version = 1.x-0.3.4
 
 # JS/CSS are exposed via hook_library_info() and attached only when needed.

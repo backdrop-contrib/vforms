@@ -5,7 +5,6 @@
 
 /* Group header row (inserted client-side). */
 tr.vforms-group-row > td.vforms-group-cell {
-  padding: 10px 8px;
   border-top: 4px groove #cc3;
   background: #de9;
 
@@ -27,6 +26,7 @@ tr.vforms-group-row-ungrouped > td.vforms-group-cell {
 }
 
 .vforms-group-title {
+  padding: 1px !important;
   min-width: 240px;
 }
 

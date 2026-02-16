@@ -54,3 +54,119 @@
   };
 
 })(jQuery, Backdrop);
+
+(function ($, Backdrop) {
+  "use strict";
+
+  function vforms_apply_dialog_link($link, href, width) {
+    if (!$link || !$link.length) return;
+
+    $link.addClass('use-ajax');
+    $link.attr('data-dialog', 'true');
+    $link.attr('data-dialog-type', 'dialog');
+    $link.attr('data-dialog-options', JSON.stringify({
+      width: parseInt(width, 10) || 900,
+      target: '#vforms-dialog-target',
+      modal: false,
+      draggable: true,
+      resizable: true
+    }));
+
+    $link.attr('href', href);
+  }
+
+  function vforms_href_matches(href, targets) {
+    if (!href) return false;
+    // Normalize leading slash.
+    var h = href;
+    // Ignore fragment.
+    if (h.indexOf('#') !== -1) {
+      h = h.split('#')[0];
+    }
+
+    for (var i = 0; i < targets.length; i++) {
+      var t = targets[i];
+      if (!t) continue;
+
+      if (h === t) return true;
+      if (h === '/' + t) return true;
+
+      // Allow query string.
+      if (h.indexOf(t + '?') === 0) return true;
+      if (h.indexOf('/' + t + '?') === 0) return true;
+    }
+    return false;
+  }
+
+  Backdrop.behaviors.vformsDialogLinks = {
+    attach: function (context, settings) {
+      settings = settings || {};
+      if (!settings.vforms) return;
+
+      var base = (Backdrop.settings && Backdrop.settings.basePath) ? Backdrop.settings.basePath : '/';
+
+      // 1) Convert the Edit local task to open the configured variant in a dialog.
+      var editCfg = settings.vforms.editTabDialog;
+      if (editCfg && editCfg.enabled && editCfg.nid && editCfg.href) {
+        var nid = editCfg.nid;
+        var targets = [
+          base + 'node/' + nid + '/edit',
+          'node/' + nid + '/edit'
+        ];
+
+        var $links = $('ul.tabs.primary a', context);
+        if ($.fn.once) {
+          $links = $links.once('vforms-edit-tab-dialog');
+        }
+        else {
+          $links = $links.filter(function () { return !$(this).data('vformsEditTabDialogBound'); })
+                         .data('vformsEditTabDialogBound', true);
+        }
+
+        $links.each(function () {
+          var $a = $(this);
+          var href = $a.attr('href') || '';
+          if (vforms_href_matches(href, targets)) {
+            vforms_apply_dialog_link($a, editCfg.href, editCfg.width);
+          }
+        });
+      }
+
+      // 2) Convert node/add/<type> links on the node/add listing page.
+      var createMap = settings.vforms.createDialogLinks;
+      if (createMap) {
+        var $aAll = $('a', context);
+        if ($.fn.once) {
+          $aAll = $aAll.once('vforms-create-dialog-links');
+        }
+        else {
+          $aAll = $aAll.filter(function () { return !$(this).data('vformsCreateDialogLinksBound'); })
+                       .data('vformsCreateDialogLinksBound', true);
+        }
+
+        $aAll.each(function () {
+          var $a = $(this);
+          var href = $a.attr('href') || '';
+
+          // Try each bundle (small list; OK).
+          for (var bundle in createMap) {
+            if (!createMap.hasOwnProperty(bundle)) continue;
+            var info = createMap[bundle];
+            if (!info || !info.href) continue;
+
+            var targets = [
+              base + 'node/add/' + bundle,
+              'node/add/' + bundle
+            ];
+
+            if (vforms_href_matches(href, targets)) {
+              vforms_apply_dialog_link($a, info.href, info.width);
+              break;
+            }
+          }
+        });
+      }
+    }
+  };
+
+})(jQuery, Backdrop);
