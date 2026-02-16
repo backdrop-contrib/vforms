@@ -454,7 +454,7 @@ class vforms_views_handler_field_node_link_vforms_edit extends views_handler_fie
         $width = 400;
       }
 
-      $options['attributes']['class'][] = 'use-ajax';
+      $options['attributes']['class'][] = 'use-ajax vforms-edit-icon';
       $options['attributes']['data-dialog'] = 'true';
       $options['attributes']['data-dialog-type'] = 'dialog';
       $options['attributes']['data-dialog-options'] = json_encode(array(

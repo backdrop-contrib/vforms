@@ -1,0 +1,6 @@
+/* Icon scales with whatever font-size the surrounding text already has */
+
+a.vforms-edit-icon .icon {
+  width: 1.3em;
+  vertical-align: middle;
+}

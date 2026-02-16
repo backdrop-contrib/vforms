@@ -5,4 +5,5 @@ type = module
 backdrop = 1.x
 version = 1.x-0.3.4
 
-# JS/CSS are exposed via hook_library_info() and attached only when needed.
+stylesheets[all][] = css/vforms.css
+# JS/CSS are also exposed via hook_library_info() and attached only when needed.
