@@ -1,9 +1,9 @@
 /**
- * commit concurrency: 300.
+ * commit concurrency: 401
  */
 
 (function ($, Backdrop) {
-  Backdrop.ajax.commands.vformsReload = function (ajax, response, status) {
+  Backdrop.ajax.prototype.commands.vformsReload = function (ajax, response, status) {
     window.location.reload();
   };
 })(jQuery, Backdrop);

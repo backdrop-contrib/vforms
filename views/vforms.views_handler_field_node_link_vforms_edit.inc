@@ -2,7 +2,7 @@
 /**
  * @file
  * Views field handler: Node Form Variants edit link.
- * commit concurrency: 301
+ * commit concurrency: 401
  */
 
 // Ensure the core node edit-link handler is available before we extend it.
@@ -83,48 +83,20 @@ class vforms_views_handler_field_node_link_vforms_edit extends views_handler_fie
   }
 
   /**
-   * Debug logging for Node Form Variants.
-   */
-  protected function vforms_debug_log($label, $data = NULL) {
-    if (empty($_GET['mf_debug'])) {
-      return;
-    }
-
-    $sev = defined('WATCHDOG_DEBUG') ? WATCHDOG_DEBUG : WATCHDOG_INFO;
-
-    if ($data !== NULL) {
-      if (is_array($data) || is_object($data)) {
-        $data = print_r($data, TRUE);
-      }
-      watchdog('vforms', $label . "\n@data", array('@data' => (string) $data), $sev);
-    }
-    else {
-      watchdog('vforms', $label, array(), $sev);
-    }
-  }
-  /**
    * Try to detect a single node bundle (content type) from the current view.
    * Returns machine name (e.g. 'job') or NULL if unknown / multiple.
    */
   protected function vforms_detect_single_bundle_from_view() {
     if (empty($this->view) || !is_object($this->view)) {
-      $this->vforms_debug_log('detect bundle: no $this->view');
       return NULL;
     }
 
     $view = $this->view;
 
-    $this->vforms_debug_log('detect bundle: view context', array(
-      'view_name'       => !empty($view->name) ? $view->name : '(unknown)',
-      'current_display' => !empty($view->current_display) ? $view->current_display : '(unknown)',
-      'base_table'      => !empty($view->base_table) ? $view->base_table : '(unknown)',
-    ));
-
     // 1) Best source in the Views UI: resolved options from the current display handler.
     $filters = NULL;
     if (!empty($view->display_handler) && is_object($view->display_handler) && method_exists($view->display_handler, 'get_option')) {
       $filters = $view->display_handler->get_option('filters');
-      $this->vforms_debug_log('detect bundle: display_handler->get_option(filters)', $filters);
     }
 
     // 2) Fallback: look on current display, then default display.
@@ -133,14 +105,11 @@ class vforms_views_handler_field_node_link_vforms_edit extends views_handler_fie
 
       if (!empty($view->display[$display_id]->display_options['filters']) && is_array($view->display[$display_id]->display_options['filters'])) {
         $filters = $view->display[$display_id]->display_options['filters'];
-        $this->vforms_debug_log("detect bundle: using display_options[filters] on {$display_id}", $filters);
       }
       elseif (!empty($view->display['default']->display_options['filters']) && is_array($view->display['default']->display_options['filters'])) {
         $filters = $view->display['default']->display_options['filters'];
-        $this->vforms_debug_log('detect bundle: using display_options[filters] on default', $filters);
       }
       else {
-        $this->vforms_debug_log('detect bundle: no filters array found anywhere');
         return NULL;
       }
     }
@@ -151,15 +120,6 @@ class vforms_views_handler_field_node_link_vforms_edit extends views_handler_fie
 
       $table = isset($f['table']) ? $f['table'] : '';
       $field = isset($f['field']) ? $f['field'] : '';
-      $id    = isset($f['id']) ? $f['id'] : '';
-
-      $this->vforms_debug_log("detect bundle: filter cfg {$fid}", array(
-        'id'    => $id,
-        'table' => $table,
-        'field' => $field,
-        'value' => isset($f['value']) ? $f['value'] : '(unset)',
-        'op'    => isset($f['operator']) ? $f['operator'] : '(unset)',
-      ));
 
       // "Content: Type" filter.
       if ($table !== 'node' || $field !== 'type') {
@@ -188,20 +148,13 @@ class vforms_views_handler_field_node_link_vforms_edit extends views_handler_fie
       }
 
       $vals = array_values(array_unique(array_filter($vals, 'strlen')));
-      $this->vforms_debug_log('detect bundle: normalized bundle candidates', $vals);
 
-      if (count($vals) === 1) {
-        $this->vforms_debug_log('detect bundle: SUCCESS', $vals[0]);
-        return $vals[0];
-      }
-
-      $this->vforms_debug_log('detect bundle: type filter present but not singular', $vals);
-      return NULL;
+      return (count($vals) === 1) ? $vals[0] : NULL;
     }
 
-    $this->vforms_debug_log('detect bundle: no node.type filter found in filter config');
     return NULL;
   }
+
   /**
    * Build select options for variants of a specific bundle.
    * Always includes 'default'. Uses variant label when available.
@@ -416,7 +369,7 @@ class vforms_views_handler_field_node_link_vforms_edit extends views_handler_fie
           ':input[name="options[vforms_modal]"]' => array('checked' => TRUE),
         ),
       ),
-    );  
+    );
 
   }
 
@@ -491,6 +444,9 @@ class vforms_views_handler_field_node_link_vforms_edit extends views_handler_fie
 
       // Ensure your target div is present.
       backdrop_add_library('vforms', 'dialog_target');
+
+      // Dialog helpers (includes Ajax command definitions used after save).
+      backdrop_add_library('vforms', 'dialog');
 
       $path .= '/dialog';
       $width = trim((string) $this->options['vforms_dialog_width']);

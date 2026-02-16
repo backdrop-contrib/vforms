@@ -1,5 +1,5 @@
 /**
- * commit concurrency: 300.
+ * commit concurrency: 401
  */
 
 (function ($, Backdrop) {
@@ -11,7 +11,7 @@
    * Response format (from PHP):
    *   { command: 'vformsReload', destination: '/some/path' }
    */
-  Backdrop.ajax.commands.vformsReload = function (ajax, response, status) {
+  Backdrop.ajax.prototype.commands.vformsReload = function (ajax, response, status) {
     // If a destination is provided, navigate to it.
     if (response && response.destination) {
       window.location.href = response.destination;

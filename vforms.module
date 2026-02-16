@@ -2,7 +2,7 @@
 /**
  * @file
  * Node Form Variants: form variants for node edit forms (Phase 1).
- * commit concurrency: 302
+ * commit concurrency: 401
  */
 
 /**
@@ -336,13 +336,26 @@ function vforms_make_node_form_dialog(array &$form, array &$form_state, $variant
     '#value' => (string) $variant_key,
   );
 
+  // Persist destination (the page that opened the dialog) so we can redirect after save.
+  $destination = !empty($_GET['destination']) ? (string) $_GET['destination'] : current_path();
+  // Normalize: Backdrop expects internal paths without a leading '/'.
+  $destination = ltrim($destination, '/');
+  $form['vforms_destination'] = array(
+    '#type' => 'value',
+    '#value' => $destination,
+  );
+
   // Wrapper for AJAX replace-on-error.
   $form['#prefix'] = '<div id="vforms-dialog-wrapper">';
   $form['#suffix'] = '</div>';
   $form['#attributes']['class'][] = 'vforms-dialog-form';
 
   // Make sure the form POST stays on the dialog route (and is root-relative).
-  $form['#action'] = url(current_path(), array('absolute' => FALSE));
+  // Keep destination in the action query so it survives /system/ajax rebuilds.
+  $form['#action'] = url(current_path(), array(
+    'absolute' => FALSE,
+    'query' => array('destination' => $destination),
+  ));
   // Ensure Node Form Variants dialog commands (vformsReload) are always available.
   $form['#attached']['library'][] = array('vforms', 'dialog');
   $form['#attached']['library'][] = array('vforms', 'dialog_target');
@@ -404,22 +417,21 @@ function vforms_dialog_ajax_submit($form, &$form_state) {
   // Add a normal Backdrop message (server-side).
   backdrop_set_message(t('Saved.'), 'status');
 
-  $response = array(
+  // Redirect back to the page that opened the dialog. This forces a refresh so
+  // Views output updates without needing a custom JS Ajax command.
+  $destination = !empty($form_state['values']['vforms_destination'])
+    ? (string) $form_state['values']['vforms_destination']
+    : current_path();
+
+  $destination = ltrim($destination, '/');
+  $url = url($destination, array('absolute' => FALSE));
+
+  return array(
     '#type' => 'ajax',
-    '#commands' => array(),
+    '#commands' => array(
+      ajax_command_redirect($url),
+    ),
   );
-
-  // Close the dialog (for your target-based dialog).
-  $response['#commands'][] = ajax_command_close_dialog('#vforms-dialog-target');
-
-  // Re-render messages on the underlying page (if it has a #messages wrapper).
-  // If your theme uses a different selector, change '#messages' accordingly.
-  $response['#commands'][] = ajax_command_replace('#messages', theme('status_messages'));
-
-  // If you want a hard refresh instead of messages:
-  // $response['#commands'][] = array('command' => 'vformsReload');
-
-  return $response;
 }
 
 /**

@@ -1,0 +1,16 @@
+<?php
+/**
+ * @file
+ * Node Form Variants: form variants for node edit forms (Phase 1).
+ * commit concurrency: 401
+ */
+
+/**
+ * Implements hook_uninstall().
+ */
+function vforms_uninstall() {
+  // Delete all vforms configuration objects (variants, settings, etc.).
+  foreach (config_get_names_with_prefix('vforms.') as $name) {
+    config($name)->delete();
+  }
+}
