@@ -1,6 +1,6 @@
 # Node Form Variants (vforms)
 
-Node Form Variants lets you create and manage multiple **edit-form layouts** (“variants”) per content type. Each variant can include/exclude fields, change ordering, and optionally organize fields into groups.
+Node Form Variants (vforms) lets you create and manage multiple **edit-form layouts** (“variants”) per content type. Each variant can include/exclude fields, change ordering, and optionally organize fields into groups.
 
 This module lets you define multiple “layouts” for the node edit form of a content type, then choose which layout to use when editing.
 A concrete use-case:
